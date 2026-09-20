@@ -59,6 +59,7 @@ Accuracy notes (all measured, see the tests):
 | `atanh(x)` | - |
 | `asinh(x)` | - |
 | `acosh(x)` | - |
+| `sort_by(items, key, descending=false)` | Stable merge sort of ANY list by a key function. sort_by(pairs, fn(p) { return p[0] }, true)      # largest first The built-in sorted() orders only numbers and strings: given a list of lists it returns them UNCHANGED, silently (found the hard way: "the strongest peaks" of Shor's algorithm came back in index order). Use this instead. |
 | `fixed(x, d)` | fixed(x, d): x with exactly d digits after the point, e.g. fixed(3.14159, 2) = "3.14" |
 | `sci(x, d)` | sci(x, d): scientific notation with d digits after the point, e.g. sci(6.62607015e-34, 3) = "6.626e-34" |
 | `sig(x, n)` | sig(x, n): n significant digits, fixed notation when it reads naturally, else scientific. |

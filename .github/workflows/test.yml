@@ -36,7 +36,7 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/larz-scripter/larzscript/main/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: the tests can fail (28 mutants)
+      - name: the tests can fail (33 mutants)
         run: python3 tools/mutation_check.py
   web:
     runs-on: ubuntu-latest
