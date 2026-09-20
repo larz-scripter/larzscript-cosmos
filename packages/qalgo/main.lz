@@ -272,7 +272,7 @@ fn _best_denominator(x, max_den) {
 # Factor N (odd, not a prime power, N <= 21 keeps it under 16 qubits) using base a.
 # Runs the real circuit: Hadamards, controlled modular multiplications, inverse QFT.
 fn shor(modulus, a) {
-  if gcd(a, modulus) != 1 { return {"factors": [gcd(a, modulus), modulus / gcd(a, modulus)], "period": nil, "note": "lucky: a shares a factor with N"} }
+  if gcd(a, modulus) != 1 { return {"factors": [gcd(a, modulus), modulus / gcd(a, modulus)], "period": nil, "peak_y": nil, "peak_denominator": nil, "peaks": [], "note": "lucky: a shares a factor with N"} }
   let work_bits = _bit_length(modulus)
   let t = 2 * work_bits
   let n = t + work_bits
@@ -294,24 +294,29 @@ fn shor(modulus, a) {
     for w in range(wsize) { p = p + probs[y * wsize + w] }
     dist.push(p)
   }
-  # read the period off the strongest peaks
+  # Read the period off the strongest measurement peaks - and only off them. Each peak y satisfies y / 2^t ~ j / r, so the
+  # continued-fraction expansion of y / 2^t has denominator r (or a divisor of it, when j and r share a factor; then a
+  # multiple of that denominator is tried). A denominator of 1 carries no information and is skipped: trying "every
+  # multiple of 1" would find the period by brute force and make the quantum part decorative.
   let order = nil
-  let tried = []
+  let used = nil
+  let used_denom = nil
   let ranked = []
   for y in range(1, len(dist)) { ranked.push([dist[y], y]) }
-  ranked = sorted(ranked)
-  ranked = reversed(ranked)
-  for cand in ranked[0:12] {
+  ranked = m.sort_by(ranked, fn(r) { return r[0] }, true)          # strongest first (built-in sorted() cannot sort pairs)
+  let cutoff = ranked[0][0] * 0.25                                # a genuine peak is not far below the strongest one
+  for cand in ranked[0:24] {
+    if cand[0] < cutoff { break }
     let denom = _best_denominator(cand[1] / (2 ** t), modulus)
-    tried.push(denom)
+    if denom < 2 { continue }
     let mult = denom
-    while mult < 4 * modulus and order == nil {          # the peak may reveal a divisor of the period
-      if _modpow(a, mult, modulus) == 1 { order = mult }
+    while mult <= 4 * modulus and order == nil {
+      if _modpow(a, mult, modulus) == 1 { order = mult; used = cand[1]; used_denom = denom }
       mult = mult + denom
     }
     if order != nil { break }
   }
-  if order == nil { return {"factors": nil, "period": nil, "note": "no period found", "qubits": n} }
+  if order == nil { return {"factors": nil, "period": nil, "peak_y": nil, "peak_denominator": nil, "peaks": ranked[0:6], "note": "no period found", "qubits": n} }
   let factors = nil
   if order % 2 == 0 {
     let half = _modpow(a, order / 2, modulus)
@@ -322,6 +327,6 @@ fn shor(modulus, a) {
       else if f2 > 1 and f2 < modulus { factors = [f2, modulus / f2] }
     }
   }
-  return {"factors": factors, "period": order, "qubits": n, "counting_qubits": t,
+  return {"factors": factors, "period": order, "qubits": n, "counting_qubits": t, "peak_y": used, "peak_denominator": used_denom,
           "peaks": [[cand[1], cand[0]] for cand in ranked[0:6]]}
 }

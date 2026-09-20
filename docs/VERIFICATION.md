@@ -12,9 +12,9 @@ Physics code fails quietly: a wrong factor of two still prints a plausible numbe
 | Closed forms | Algorithms and cosmology | QFT = DFT; Grover = sin^2((2k+1) theta); flat-LCDM age = 2/(3 H0 sqrt(OL)) asinh(sqrt(OL/Om)); matter-only distance = 2c/H0 (1 - 1/sqrt(1+z)); above-barrier tunneling resonance k a = pi gives T = 1; E^2 = (pc)^2 + (mc^2)^2. |
 | Physical consistency | Constants | mu0 eps0 c^2 = 1; a0 = hbar/(m_e c alpha); R_inf = alpha^2 m_e c/2h; Compton wavelength; classical electron radius; the Rydberg energy 13.605693122994 eV. |
 | Published values | End results | GPS +38.4 microseconds/day; Sun r_s 2.95 km; Earth r_s 8.87 mm; Hawking T of the Sun 6.17e-8 K; hydrogen Balmer lines (air) 656.28 / 486.13 / 434.05 / 410.17 nm; 100 kV electrons 3.70 pm; Pound-Rebka 2.46e-15; Planck-2018 age 13.80 Gyr. |
-| Mutation testing | The tests themselves | `tools/mutation_check.py` breaks the code in 28 realistic ways and requires the suite to fail each time. All 28 are caught. |
+| Mutation testing | The tests themselves | `tools/mutation_check.py` breaks the code in 33 realistic ways and requires the suite to fail each time. All 33 are caught. |
 
-Run everything with `sh tests/run_tests.sh` (433 checks). The generated reference files in `tests/data_*.lz` are produced by the scripts in `tools/`; CI regenerates them and fails if they change.
+Run everything with `sh tests/run_tests.sh` (454 checks). The generated reference files in `tests/data_*.lz` are produced by the scripts in `tools/`; CI regenerates them and fails if they change.
 
 ## Bugs this process found
 

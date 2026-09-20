@@ -105,4 +105,18 @@ t.check(f15["factors"] != nil and f15["factors"][0] * f15["factors"][1] == 15 an
 t.equal(qa.shor(15, 14)["factors"], nil, "a = 14 = -1 mod 15 has an even order but yields no factors (Shor's known failure case)")
 t.equal(qa.shor(15, 3)["factors"][0] * qa.shor(15, 3)["factors"][1], 15, "a sharing a factor with N is handled")
 t.raises(fn() { qa.shor(35, 2) }, "N too large for the simulator is refused")
+
+t.suite("qalgo: Shor's peaks are real, sorted, and the period comes from them")
+let pk = qa.shor(15, 7)["peaks"]
+for i in range(len(pk) - 1) { t.check(pk[i][1] >= pk[i + 1][1], "peak " + str(i) + " is not weaker than peak " + str(i + 1)) }
+t.close(pk[0][1], 0.25, 0.000000001, "N=15 a=7: strongest peak carries probability 1/4")
+t.equal(sorted([pk[0][0], pk[1][0], pk[2][0]]), [64, 128, 192], "N=15 a=7: peaks sit at y = 2^8 * j / 4 for j = 1, 2, 3")
+t.check(pk[3][1] < 0.000001, "the fourth 'peak' is noise, so the top three are the whole signal")
+t.equal(qa.shor(15, 7)["peak_denominator"], 4, "continued fraction of the peak gives denominator 4 = the period, not 1")
+t.equal(qa.shor(15, 4)["peak_denominator"], 2, "order-2 case: the peak at 128/256 = 1/2 gives denominator 2")
+t.check(qa.shor(15, 7)["peak_y"] != nil, "a quantum peak is recorded as the source of the period")
+let pk2 = qa.shor(15, 4)["peaks"]
+t.equal(pk2[0][0], 128, "N=15 a=4 (order 2): the single non-zero peak is y = 128")
+t.close(pk2[0][1], 0.5, 0.000000001, "N=15 a=4: peak probability 1/2")
+t.equal(qa.shor(15, 3)["peak_y"], nil, "gcd shortcut uses no quantum peak and says so")
 t.finish()

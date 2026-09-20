@@ -41,6 +41,10 @@ MUTANTS = [
  ("astro", "test_astro", "absolute magnitude: 2.5 -> 2.0", "fn absolute_magnitude(luminosity_w) { return 4.74 - 2.5 * m.log10(luminosity_w / k.L_sun) }", "fn absolute_magnitude(luminosity_w) { return 4.74 - 2.0 * m.log10(luminosity_w / k.L_sun) }"),
  ("astro", "test_astro", "Kepler's third law: 2 pi -> pi", "fn orbital_period_s(semi_major_m, gm_m3_s2) { return m.TAU *", "fn orbital_period_s(semi_major_m, gm_m3_s2) { return m.PI *"),
  ("astro", "test_astro", "cosmology: dark energy term uses Om instead of 1 - Om", "+ (1.0 - omega_m))", "+ omega_m)"),
+ ("physmath", "test_physmath", "sort_by: descending flag ignored", "if descending ? a >= b : a <= b {", "if a <= b {"),
+ ("physmath", "test_physmath", "sort_by: merge is unstable for equal keys", "if descending ? a >= b : a <= b {", "if descending ? a > b : a < b {"),
+ ("qalgo", "test_qalgo", "Shor: peaks left unsorted (index order)", "  ranked = m.sort_by(ranked, fn(r) { return r[0] }, true)          # strongest first (built-in sorted() cannot sort pairs)", "  ranked = ranked + []"),
+ ("qalgo", "test_qalgo", "Shor: peak ignored, period found by brute force from denominator 1", "    let denom = _best_denominator(cand[1] / (2 ** t), modulus)\n    if denom < 2 { continue }", "    let denom = 1\n    if denom < 2 { denom = 1 }"),
 ]
 def run(pkg_filter=""):
     base = tempfile.mkdtemp(prefix="cosmos-mut-")

@@ -22,13 +22,13 @@ for line in q.draw(n, ops).split("\\n") { print("row|diagram|" + line) }
 let probs = q.probabilities(s)
 let ranked = []
 for i in range(len(probs)) { if probs[i] > 0.0000000001 { ranked.push([probs[i], i]) } }
-ranked = reversed(sorted(ranked))
+ranked = m.sort_by(ranked, fn(r) { return r[0] }, true)
 print("nonzero=" + str(len(ranked)))
 for r in ranked[0:16] { print("row|state|" + q.bits(r[1], n) + "|" + m.sci(r[0], 9) + "|" + m.fixed(s["re"][r[1]], 6) + "|" + m.fixed(s["im"][r[1]], 6)) }
 let counts = q.sample(s, ${shots})
 let items = []
 for key in keys(counts) { items.push([counts[key], key]) }
-items = reversed(sorted(items))
+items = m.sort_by(items, fn(r) { return r[0] }, true)
 for it in items[0:16] { print("row|counts|" + it[1] + "|" + str(it[0])) }
 for j in range(n) {
   let b = q.bloch(s, j)
@@ -216,7 +216,7 @@ def shor():
     set('period',k.period==='none'?'—':k.period); note('period','a^r ≡ 1 (mod '+v.modulus+') for the smallest such r');
     set('qubits',k.qubits==='0'?'—':k.qubits+' qubits'); note('qubits',k.qubits==='0'?'':k.counting+' counting + '+(N(k,'qubits')-N(k,'counting'))+' work qubits');
     set('classical',k.classical==='0'?'—':k.classical); note('classical','found by multiplying repeatedly, for comparison');
-    var pk=rows.peaks||[]; var t=Number(k.counting||0);
+    var pk=(rows.peaks||[]).filter(function(r){return Number(r[1])>0.000001;});   /* noise floor: show only genuine peaks */ var t=Number(k.counting||0);
     if(pk.length){C.bars($('peaks'),pk.map(function(r){return {label:'y = '+r[0],value:Number(r[1]),text:C.pct(Number(r[1]),3)+'  ( y/2^t = '+C.sig(Number(r[0])/Math.pow(2,t),4)+' )'};}),{max:Math.max.apply(null,pk.map(function(r){return Number(r[1]);})),label:'Strongest measurement outcomes'});}else{$('peaks').textContent='No quantum run was needed: a shares a factor with N.';}''', timeout=300000)
     return dict(slug="shor-algorithm-simulator", group="quantum computing", icon="\U0001f510", short="Shor's algorithm",
         title="Shor's Algorithm Simulator — Factor 15 and 21 on Qubits", kicker="Quantum computing",

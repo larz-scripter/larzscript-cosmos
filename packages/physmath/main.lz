@@ -324,6 +324,31 @@ fn acosh(x) {
   return log1p(t + sqrt_(t * (2.0 + t)))
 }
 
+# ---------------------------------------------------------------- sorting
+
+# Stable merge sort of ANY list by a key function.
+#   sort_by(pairs, fn(p) { return p[0] }, true)      # largest first
+# The built-in sorted() orders only numbers and strings: given a list of lists it returns them UNCHANGED, silently
+# (found the hard way: "the strongest peaks" of Shor's algorithm came back in index order). Use this instead.
+fn sort_by(items, key, descending=false) {
+  let n = len(items)
+  if n <= 1 { return items + [] }
+  let mid = floor(n / 2)
+  let left = sort_by(items[0:mid], key, descending)
+  let right = sort_by(items[mid:], key, descending)
+  let out = []
+  let i = 0
+  let j = 0
+  while i < len(left) and j < len(right) {
+    let a = key(left[i])
+    let b = key(right[j])
+    if descending ? a >= b : a <= b { out.push(left[i]); i = i + 1 } else { out.push(right[j]); j = j + 1 }
+  }
+  while i < len(left) { out.push(left[i]); i = i + 1 }
+  while j < len(right) { out.push(right[j]); j = j + 1 }
+  return out
+}
+
 # ---------------------------------------------------------------- formatting
 # str() shows 6 significant digits. These give you control.
 

@@ -12,6 +12,7 @@ Things that shaped this code, found by running into them. Each was checked again
 - **`round` rounds halves away from zero** (`round(2.5)` is 3).
 - **There are no bit operators** (`&`, `|`, `^`, `<<`). Use `//` and `%`.
 - **`f"{x:.2f}"` ignores the format spec.**
+- **`sorted()` orders only numbers and strings. Given a list of lists it returns them unchanged, without an error.** `reversed(sorted(pairs))` therefore gives you the pairs in reverse index order, which looks plausible and is wrong. Use `physmath.sort_by(items, key, descending)`, a stable merge sort. (This bit us: v0.1.0 of the Shor and circuit-simulator pages listed their "strongest" outcomes in index order.)
 
 **Syntax**
 - **`for i from a to b` counts *down* when b < a**, so an empty range silently runs backwards. Use `for i in range(a, b)` whenever the range can be empty.

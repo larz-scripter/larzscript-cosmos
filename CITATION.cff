@@ -7,7 +7,7 @@ authors:
 repository-code: "https://github.com/larz-scripter/larzscript-cosmos"
 url: "https://larzos.com/cosmos/"
 license: MIT
-version: 0.1.0
+version: 0.1.1
 date-released: "2026-09-20"
 keywords:
   - quantum computing

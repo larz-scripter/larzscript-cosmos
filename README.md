@@ -1,6 +1,6 @@
 # larzscript-cosmos
 
-**Quantum computing, quantum mechanics, relativity and astrophysics - written entirely in [Larzscript](https://github.com/larz-scripter/larzscript). Zero dependencies, 433 automated checks, and every calculator runs live in your browser.**
+**Quantum computing, quantum mechanics, relativity and astrophysics - written entirely in [Larzscript](https://github.com/larz-scripter/larzscript). Zero dependencies, 454 automated checks, and every calculator runs live in your browser.**
 
 [![test](https://github.com/larz-scripter/larzscript-cosmos/actions/workflows/test.yml/badge.svg)](https://github.com/larz-scripter/larzscript-cosmos/actions/workflows/test.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -82,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/larz-scripter/larzscript/main/insta
 git clone https://github.com/larz-scripter/larzscript-cosmos && cd larzscript-cosmos
 export LARZSCRIPT_PATH=packages          # so `import "quantum"` finds the packages
 larzscript examples/01_bell_state.lz
-sh tests/run_tests.sh                    # 433 checks, about half a minute
+sh tests/run_tests.sh                    # 454 checks, about half a minute
 sh tests/run_examples.sh                 # 12 examples against their expected output
 ```
 
@@ -95,7 +95,7 @@ Larzscript has no `sin`, `cos`, `exp` or `ln`, its `str()` prints six digits, an
 - **High precision.** Relativity is compared with 50-digit decimal arithmetic; that is what caught two cancellation bugs (the rocket and gravitational redshift) that ordinary float references would have shared.
 - **Closed forms.** The quantum Fourier transform against the DFT; Grover against sin^2((2k+1)theta); universe ages against the exact `asinh` solution; matter-only cosmology against 2c/H0 (1 - 1/sqrt(1+z)).
 - **Published values.** GPS +38 microseconds/day, the Sun's 2.95 km Schwarzschild radius, Hawking T = 6.17e-8 K, hydrogen's Balmer lines, 100 kV electrons at 3.70 pm, the Planck-2018 age 13.80 Gyr.
-- **The tests can fail.** [`tools/mutation_check.py`](tools/mutation_check.py) breaks the code in 28 ways (a flipped sign, swapped control and target, a wrong constant...) and requires the suite to notice every time.
+- **The tests can fail.** [`tools/mutation_check.py`](tools/mutation_check.py) breaks the code in 33 ways (a flipped sign, swapped control and target, a wrong constant...) and requires the suite to notice every time.
 
 See [`docs/VERIFICATION.md`](docs/VERIFICATION.md) for the method, the bugs it found (including two in Larzscript itself), and what is *not* verified.
 
