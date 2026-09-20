@@ -60,6 +60,14 @@ report.append(("cosmos", len(hb["title"]), len(hb["description"]), len(hb["html"
 urls = ["/cosmos/"] + [f"/{p['slug']}/" for p in pages]
 frag = "".join(f'<url><loc>{SITE}{u}</loc><lastmod>{TODAY}</lastmod><changefreq>monthly</changefreq><priority>{"0.8" if u == "/cosmos/" else "0.7"}</priority></url>\n' for u in urls)
 open(os.path.join(out, "sitemap-cosmos.fragment.xml"), "w").write(frag)
+# cards for the larzos.com /tools/ index, in exactly that page's markup
+def card(slug, icon, name, desc, extra=""):
+    s = (name + " " + desc).lower()
+    return ('<a class="tcard" href="/%s/" data-cat="study" data-s="%s"><span class="ti">%s</span><span class="tb"><span class="tn">%s</span><span class="td">%s</span></span></a>'
+           % (slug, esc(s), icon, esc(name), esc(desc)))
+cards = card("cosmos", "\U0001f30c", "Larzscript Cosmos", "Quantum computing, relativity and astrophysics calculators running open-source Larzscript in your browser.")
+cards += "".join(card(p["slug"], p["icon"], p["h1"], p["lead"].split(". ")[0].rstrip(".") + ".") for p in pages)
+open(os.path.join(out, "tools-cards.fragment.html"), "w", encoding="utf-8").write(cards)
 json.dump({"urls": urls, "lib": lib_file, "hash": lib_hash, "tests": tests, "pages": [r[0] for r in report]}, open(os.path.join(out, "manifest.json"), "w"), indent=1)
 print("%-36s %5s %5s %8s" % ("page", "title", "desc", "bytes"))
 for r in report: print("%-36s %5d %5d %8d%s" % (r[0], r[1], r[2], r[3], "   <-- title > 62" if r[1] > 62 else "") + ("   <-- desc > 165" if r[2] > 165 else ""))
