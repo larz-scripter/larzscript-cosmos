@@ -1,0 +1,8 @@
+# The age of the universe and the Hubble tension.
+import "astro" as a
+import "physmath" as m
+
+print("Planck 2018  (H0 = 67.4, Om = 0.315): " + m.fixed(a.hubble_age_gyr(67.4, 0.315), 3) + " billion years")
+print("local ladder (H0 = 73.0, Om = 0.315): " + m.fixed(a.hubble_age_gyr(73.0, 0.315), 3) + " billion years")
+print("matter only  (H0 = 70,   Om = 1.0):   " + m.fixed(a.hubble_age_gyr(70.0, 1.0), 3) + " billion years")
+print("comoving distance to z = 1: " + m.fixed(a.comoving_distance_mpc(1.0, 67.4, 0.315), 1) + " Mpc")

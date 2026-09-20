@@ -1,0 +1,9 @@
+# A 1 g flip-and-burn trip: ship time versus Earth time.
+import "relativity" as rel
+import "physconst" as k
+import "physmath" as m
+
+for row in [["Alpha Centauri", 4.37], ["the galactic centre", 26670.0], ["the Andromeda Galaxy", 2537000.0]] {
+  let t = rel.rocket_trip(row[1] * k.ly, k.g0)
+  print(row[0] + " (" + m.sig(row[1], 5) + " ly): ship " + m.sig(t["ship_time_s"] / k.year, 4) + " years, Earth " + m.sig(t["earth_time_s"] / k.year, 5) + " years, peak Lorentz factor " + m.sig(t["gamma_max"], 4))
+}

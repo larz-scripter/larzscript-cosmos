@@ -1,0 +1,46 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install larzscript
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/larz-scripter/larzscript/main/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: larzscript --version
+      - name: test suites
+        run: sh tests/run_tests.sh
+      - name: examples
+        run: sh tests/run_examples.sh
+      - name: deterministic generated files are up to date
+        run: |
+          python3 tools/gen_constants.py
+          python3 tools/gen_api.py
+          git diff --exit-code
+      - name: tests also pass against freshly generated references
+        run: |
+          # Python's math.sinh etc. can differ in the last digit between platforms' libm, so these files are
+          # regenerated here (not diffed) and the tolerance-based tests are run against them.
+          python3 tools/gen_ref_complex.py
+          python3 tools/gen_ref_quantum.py
+          python3 tools/gen_ref_physics.py
+          LARZSCRIPT_PATH=packages python3 tools/check_physmath.py --emit tests/data_physmath.lz
+          sh tests/run_tests.sh
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install larzscript
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/larz-scripter/larzscript/main/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: the tests can fail (28 mutants)
+        run: python3 tools/mutation_check.py
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bundle the library for the browser
+        run: python3 web/build_lib.py

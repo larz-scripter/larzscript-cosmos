@@ -1,0 +1,8 @@
+# Shor's algorithm factors 15 on a simulated 12-qubit quantum computer.
+import "qalgo" as qa
+
+for a in [2, 7, 8, 11, 13] {
+  let r = qa.shor(15, a)
+  print("a = " + str(a) + ": period " + str(r["period"]) + "  factors " + str(r["factors"]))
+}
+print("a = 14: " + str(qa.shor(15, 14)["factors"]) + "   (14 = -1 mod 15: a known failure case)")

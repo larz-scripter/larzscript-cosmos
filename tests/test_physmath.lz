@@ -1,0 +1,106 @@
+import "harness" as t
+import "physmath" as m
+import "data_physmath" as ref
+
+t.suite("physmath: reference sweeps against IEEE-double values")
+fn sweep(name, table, f, tol) {
+  let worst = 0.0
+  for row in table {
+    let want = row[1]
+    let got = f(row[0])
+    let e = abs(want) < 0.000000000000001 ? abs(got - want) : abs(got - want) / abs(want)
+    if e > worst { worst = e }
+  }
+  t.check(worst <= tol, name + " worst relative error " + m.sci(worst, 2) + " <= " + m.sci(tol, 0))
+}
+sweep("sin", ref.REF_SIN, m.sin, 0.000000000000003)
+sweep("cos", ref.REF_COS, m.cos, 0.000000000000003)
+sweep("tan", ref.REF_TAN, m.tan, 0.000000000000005)
+sweep("exp", ref.REF_EXP, m.exp, 0.000000000000003)
+sweep("ln", ref.REF_LN, m.ln, 0.000000000000003)
+sweep("atan", ref.REF_ATAN, m.atan, 0.000000000000003)
+sweep("asin", ref.REF_ASIN, m.asin, 0.000000000000004)
+sweep("acos", ref.REF_ACOS, m.acos, 0.000000000000004)
+sweep("sinh", ref.REF_SINH, m.sinh, 0.000000000000004)
+sweep("cosh", ref.REF_COSH, m.cosh, 0.000000000000003)
+sweep("tanh", ref.REF_TANH, m.tanh, 0.000000000000004)
+sweep("cbrt", ref.REF_CBRT, m.cbrt, 0.000000000000003)
+sweep("log1p", ref.REF_LOG1P, m.log1p, 0.000000000000003)
+sweep("atanh", ref.REF_ATANH, m.atanh, 0.000000000000003)
+sweep("asinh", ref.REF_ASINH, m.asinh, 0.000000000000003)
+sweep("acosh", ref.REF_ACOSH, m.acosh, 0.000000000000003)
+sweep("sqrt_ (600 orders of magnitude)", ref.REF_SQRT_, m.sqrt_, 0.0000000000000005)
+let wh = 0.0
+for r in ref.REF_HYPOT { let e = abs(m.hypot(r[0], r[1]) - r[2]) / r[2]; if e > wh { wh = e } }
+t.check(wh <= 0.0000000000000005, "hypot worst error " + m.sci(wh, 2) + " (no overflow/underflow in the squares)")
+let w = 0.0
+for r in ref.REF_ATAN2 { let e = abs(m.atan2(r[0], r[1]) - r[2]) / (abs(r[2]) > 0.000000000001 ? abs(r[2]) : 1.0); if e > w { w = e } }
+t.check(w <= 0.000000000000005, "atan2 worst error " + m.sci(w, 2))
+w = 0.0
+for r in ref.REF_POWF { let e = abs(m.powf(r[0], r[1]) - r[2]) / abs(r[2]); if e > w { w = e } }
+t.check(w <= 0.00000000000005, "powf worst error " + m.sci(w, 2) + " (exp(y ln x) amplifies by |y ln x|)")
+
+t.suite("physmath: exact landmarks and identities")
+t.close(m.sin(m.PI / 6), 0.5, 0.000000000000002, "sin(pi/6) = 1/2")
+t.close(m.cos(m.PI / 3), 0.5, 0.000000000000002, "cos(pi/3) = 1/2")
+t.close(m.sin(m.PI / 2), 1.0, 0.000000000000001, "sin(pi/2) = 1")
+t.close(m.cos(m.PI), -1.0, 0.000000000000001, "cos(pi) = -1")
+t.close(m.exp(1), m.E, 0.000000000000002, "exp(1) = e")
+t.close(m.ln(m.E), 1.0, 0.000000000000002, "ln(e) = 1")
+t.close(m.log10(1000), 3.0, 0.000000000000002, "log10(1000) = 3")
+t.close(m.log2(1024), 10.0, 0.000000000000002, "log2(1024) = 10")
+t.close(m.atan(1) * 4, m.PI, 0.000000000000002, "4 atan(1) = pi")
+t.close(m.degrees(m.radians(37.5)), 37.5, 0.000000000000002, "degrees(radians(x)) = x")
+let worst = 0.0
+for x in [0.1, 0.7, 1.3, 2.9, 4.4, 6.0, -3.3, 100.5, 12345.6] {
+  let e = abs(m.sin(x) * m.sin(x) + m.cos(x) * m.cos(x) - 1.0)
+  if e > worst { worst = e }
+}
+t.check(worst < 0.000000000000003, "sin^2 + cos^2 = 1 (worst " + m.sci(worst, 2) + ")")
+worst = 0.0
+for x in [0.001, 0.5, 3.0, 40.0, 1000.0, 123456.0] {
+  let e = abs(m.exp(m.ln(x)) - x) / x
+  if e > worst { worst = e }
+}
+t.check(worst < 0.000000000000004, "exp(ln x) = x (worst " + m.sci(worst, 2) + ")")
+t.close(m.powf(2, 0.5), m.SQRT2, 0.000000000000002, "powf(2, 1/2) = sqrt 2")
+t.close(m.powf(27, 1.0 / 3.0), 3.0, 0.00000000000001, "powf(27, 1/3) = 3")
+t.close(m.powf(9, -2), 1.0 / 81.0, 0.000000000000001, "powf with whole negative exponent")
+t.close(m.cbrt(-8), -2.0, 0.000000000000002, "cbrt(-8) = -2")
+t.close(m.hypot(3, 4), 5.0, 0.000000000000001, "hypot(3,4) = 5")
+t.close(m.atan2(-1, -1), -3.0 * m.PI / 4.0, 0.000000000000002, "atan2 third quadrant")
+t.close(m.sinh(0.0), 0.0, 0.000000000000001, "sinh(0) = 0")
+t.close(m.cosh(0.0), 1.0, 0.000000000000001, "cosh(0) = 1")
+
+t.suite("physmath: errors")
+t.close(m.sqrt_(0.00000000000000000000000000000000000000000000001), 0.000000000000000000000001 * 0.316227766016838, 0.0000000000000005, "sqrt_(1e-47) = 3.16e-24 (the built-in sqrt returns 8.67e-19 here)")
+t.close(m.sqrt_(4.0), 2.0, 0.0, "sqrt_(4) = 2")
+t.raises(fn() { m.sqrt_(-1) }, "sqrt_(negative) throws")
+t.raises(fn() { m.atanh(1.0) }, "atanh(1) throws")
+t.raises(fn() { m.acosh(0.5) }, "acosh(0.5) throws")
+t.close(m.log1p(0.000000000001), 0.000000000000999999999999500000000000333, 0.000000000000001, "log1p(1e-12) keeps every digit")
+t.raises(fn() { m.ln(0) }, "ln(0) throws")
+t.raises(fn() { m.ln(-2) }, "ln(negative) throws")
+t.raises(fn() { m.asin(1.5) }, "asin(1.5) throws")
+t.raises(fn() { m.acos(-1.0001) }, "acos(-1.0001) throws")
+t.raises(fn() { m.exp(710) }, "exp(710) overflows loudly")
+t.raises(fn() { m.powf(-2, 0.5) }, "powf(negative, fractional) throws")
+t.equal(m.exp(-800), 0.0, "exp(-800) underflows to 0")
+
+t.suite("physmath: number formatting")
+t.equal(m.fixed(3.14159, 2), "3.14", "fixed rounds")
+t.equal(m.fixed(2.5, 0), "3", "fixed 0 places")
+t.equal(m.fixed(-0.004, 2), "0.00", "fixed does not print negative zero")
+t.equal(m.fixed(-1.5, 3), "-1.500", "fixed pads and keeps sign")
+t.equal(m.fixed(1234567.891, 1), "1234567.9", "fixed with a large value")
+t.equal(m.sci(6.62607015 * pow(10, -34), 3), "6.626e-34", "sci small")
+t.equal(m.sci(299792458, 4), "2.9979e+08", "sci large")
+t.equal(m.sci(9.9996, 3), "1.000e+01", "sci carries when rounding up a decade")
+t.equal(m.sci(-0.000123, 2), "-1.23e-04", "sci negative")
+t.equal(m.sci(0, 2), "0.00e+00", "sci zero")
+t.equal(m.sig(1234.5678, 5), "1234.6", "sig 5")
+t.equal(m.sig(0.000123456, 3), "0.000123", "sig small fixed")
+t.equal(m.sig(0.00001234, 3), "1.23e-05", "sig switches to sci below 1e-4")
+t.equal(m.sig(12345678, 3), "1.23e+07", "sig switches to sci at 1e6")
+t.equal(m.sig(0, 3), "0", "sig zero")
+t.finish()

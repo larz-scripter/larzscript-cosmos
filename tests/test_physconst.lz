@@ -1,0 +1,38 @@
+import "harness" as t
+import "physconst" as k
+import "physmath" as m
+
+t.suite("physconst: exact constants")
+t.equal(k.c, 299792458, "speed of light")
+t.equal(k.ly, 9460730472580800, "light-year = c x Julian year (exact)")
+t.equal(k.AU, 149597870700, "astronomical unit")
+t.close(k.h, 6.62607015 * pow(10, -34), 0.000000000000004, "h")
+t.close(k.e, 1.602176634 * pow(10, -19), 0.000000000000004, "e")
+t.close(k.NA, 6.02214076 * pow(10, 23), 0.000000000000004, "N_A")
+t.close(k.eV, k.e, 0.0, "1 eV = e joules")
+
+t.suite("physconst: internal consistency (independent physical relations)")
+t.close(k.mu0 * k.eps0 * k.c * k.c, 1.0, 0.000000001, "mu0 eps0 c^2 = 1")
+t.close(k.hbar, k.h / (2.0 * m.PI), 0.000000000000001, "hbar = h / 2 pi")
+t.close(k.a0, k.hbar / (k.m_e * k.c * k.alpha), 0.000000001, "Bohr radius = hbar / (m_e c alpha)")
+t.close(k.Rinf, k.alpha * k.alpha * k.m_e * k.c / (2.0 * k.h), 0.000000001, "Rydberg constant = alpha^2 m_e c / 2h")
+t.close(k.lambda_C, k.h / (k.m_e * k.c), 0.000000001, "Compton wavelength = h / m_e c")
+t.close(k.r_e, k.alpha * k.hbar / (k.m_e * k.c), 0.000000001, "classical electron radius = alpha hbar / m_e c")
+t.close(k.h * k.c * k.Rinf / k.eV, 13.605693122994, 0.0000000001, "Rydberg energy = 13.605693122994 eV (CODATA 2018)")
+t.close(k.m_p / k.m_e, 1836.15267343, 0.000000001, "proton/electron mass ratio (CODATA 2018)")
+t.close(k.R, 8.314462618, 0.000000001, "molar gas constant = N_A k_B")
+t.close(k.F, 96485.33212, 0.0000000001, "Faraday constant = N_A e")
+t.close(k.sigma, 0.00000005670374419, 0.000000001, "Stefan-Boltzmann constant")
+t.close(k.wien_b, 0.002897771955, 0.000000001, "Wien displacement constant")
+t.close(k.pc, 30856775814913673.0, 0.000000000000002, "parsec = 648000/pi AU")
+t.close(k.pc / k.ly, 3.26156377716743, 0.0000000000001, "1 parsec = 3.2616 light-years")
+t.close(k.M_sun, 1.98841 * pow(10, 30), 0.00001, "solar mass GM_sun / G = 1.98841e30 kg")
+t.close(k.M_earth, 5.9722 * pow(10, 24), 0.00001, "Earth mass GM_earth / G = 5.9722e24 kg")
+t.close(k.GM_sun / k.GM_earth, 332946.05, 0.0000001, "Sun/Earth mass ratio 332946")
+
+t.suite("physconst: metadata")
+t.check(k.INFO.has("c") and k.INFO.has("G") and k.INFO.has("M_sun"), "INFO covers the constants")
+t.equal(k.INFO["c"]["kind"], "exact", "c is exact")
+t.equal(k.INFO["G"]["kind"], "measured", "G is measured (CODATA)")
+t.equal(k.INFO["hbar"]["kind"], "derived", "hbar is derived")
+t.finish()

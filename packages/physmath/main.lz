@@ -1,0 +1,396 @@
+# physmath - the maths Larzscript does not ship, in pure Larzscript.
+#
+# Larzscript has sqrt and whole-number pow, but no sin/cos/tan, exp/ln,
+# inverse trig or fractional powers - and str() only prints 6 significant
+# digits, which is useless for physics. This package fills that gap with
+# routines accurate to ~1e-15 relative (checked against IEEE double
+# references in tests/test_physmath.lz), so the quantum / relativity /
+# astro packages built on it can be trusted to the last digit that matters.
+#
+#   import "physmath" as m
+#   print(m.sin(m.PI / 6))          # 0.5
+#   print(m.sci(m.exp(-50), 4))     # 1.929e-22
+#
+# Accuracy notes (all measured, see the tests):
+#   sin/cos/tan   ~1e-16 relative for |x| up to ~1e6 rad (three-part
+#                 Cody-Waite reduction); still sensible beyond, but the
+#                 reduction loses about one digit per factor of 10.
+#   exp/ln        ~1e-16 relative over the whole double range.
+#   atan/asin/... ~1e-16.
+
+let PI = 3.141592653589793
+let TAU = 6.283185307179586
+let HALF_PI = 1.5707963267948966
+let E = 2.718281828459045
+let LN2 = 0.6931471805599453
+let LN10 = 2.302585092994046
+let SQRT2 = 1.4142135623730951
+
+# Split constants so k*part is exact for the k we use (fdlibm).
+let _LN2_HI = 0.6931471803691238
+let _LN2_LO = 0.00000000019082149292705877
+let _P1 = 1.5707963267341256
+let _P2 = 0.00000000006077100506303966
+let _P3 = 0.0000000000000000000020222662487111665
+let _P3T = 0.0000000000000000000000000000000847842766036889957
+
+fn _err(kind, msg) { throw {"type": kind, "message": msg} }
+
+# 2 ** k for a whole number k, kept inside the normal double range.
+fn _pow2(k) {
+  if k > 1023 { _err("LarzValueError", "physmath: result overflows a double") }
+  if k < -1022 {
+    # denormal territory: build it in two steps so it doesn't flush to 0 early
+    return pow(2, k + 100) * pow(2, -100)
+  }
+  return pow(2, k)
+}
+
+fn exp(x) {
+  if x > 709.78 { _err("LarzValueError", "exp(): overflow (argument above 709.78)") }
+  if x < -745.0 { return 0.0 }
+  let k = floor(x / LN2 + 0.5)
+  let r = (x - k * _LN2_HI) - k * _LN2_LO
+  let term = 1.0
+  let total = 1.0
+  let n = 1
+  while n <= 22 {
+    term = term * r / n
+    total = total + term
+    n = n + 1
+  }
+  return total * _pow2(k)
+}
+
+fn ln(x) {
+  if x <= 0 { _err("LarzValueError", "ln(): needs a positive number") }
+  let e = 0
+  let m = x
+  while m >= 1024.0 { m = m / 1024.0; e = e + 10 }
+  while m >= 2.0 { m = m / 2.0; e = e + 1 }
+  while m < 0.0009765625 { m = m * 1024.0; e = e - 10 }
+  while m < 0.5 { m = m * 2.0; e = e - 1 }
+  if m < 0.7071067811865476 { m = m * 2.0; e = e - 1 }
+  # ln(m) = 2 atanh((m-1)/(m+1)), |f| <= 0.1716 so the series converges fast
+  let f = (m - 1.0) / (m + 1.0)
+  let f2 = f * f
+  let power = f
+  let total = 0.0
+  let n = 1
+  while n <= 41 {
+    total = total + power / n
+    power = power * f2
+    n = n + 2
+  }
+  return e * LN2 + 2.0 * total
+}
+
+fn log10(x) { return ln(x) / LN10 }
+fn log2(x) { return ln(x) / LN2 }
+fn log(x, base) { return ln(x) / ln(base) }
+
+# x ** y for real y (the built-in pow only takes whole exponents).
+# Fractional powers go through exp(y * ln x), so the relative error is about
+# 1e-16 * |y * ln x| - fine for physics, but do not expect 1e-16 at y = 30.
+fn powf(x, y) {
+  if y == floor(y) and abs(y) < 1000000 { return pow(x, int(y)) }
+  if x < 0 { _err("LarzValueError", "powf(): negative base with a fractional exponent") }
+  if x == 0 { return y > 0 ? 0.0 : _err("LarzValueError", "powf(): 0 to a non-positive power") }
+  return exp(y * ln(x))
+}
+
+fn cbrt(x) {
+  if x == 0 { return 0.0 }
+  let s = x < 0 ? -1.0 : 1.0
+  let a = abs(x)
+  let y = exp(ln(a) / 3.0)
+  y = y - (y * y * y - a) / (3.0 * y * y)     # one Newton step to shave the last ulp
+  return s * y
+}
+
+# sqrt that is correct for EVERY positive double.
+#
+# The built-in sqrt() runs Newton's method from max(x, 1) for a fixed 60 iterations. Below
+# about 1e-36 (or above about 1e36) it cannot converge and returns garbage - e.g.
+# sqrt(1e-47) gives 8.67e-19 instead of 3.16e-24 - and atomic-scale physics in SI units
+# (energies ~1e-19..1e-47 J) lives exactly there. Here x is scaled into [1, 4) by powers
+# of 4, the built-in is applied where it is reliable, and the power of 2 is restored.
+fn sqrt_(x) {
+  if x < 0 { _err("LarzValueError", "sqrt_(): negative argument") }
+  if x == 0 { return 0.0 }
+  let mant = x
+  let e = 0
+  while mant >= 1099511627776.0 { mant = mant / 1099511627776.0; e = e + 20 }   # 4^20
+  while mant >= 4.0 { mant = mant / 4.0; e = e + 1 }
+  while mant < 0.000000000000909494701772928 { mant = mant * 1099511627776.0; e = e - 20 }
+  while mant < 1.0 { mant = mant * 4.0; e = e - 1 }
+  return sqrt(mant) * pow(2, e)
+}
+
+# sqrt(a^2 + b^2) without overflow or underflow in the squares
+fn hypot(a, b) {
+  let x = abs(a)
+  let y = abs(b)
+  let hi = x > y ? x : y
+  if hi == 0 { return 0.0 }
+  let lo = x > y ? y : x
+  let r = lo / hi
+  return hi * sqrt_(1.0 + r * r)
+}
+
+# ---------------------------------------------------------------- trigonometry
+
+# x = k*(pi/2) + r with |r| <= pi/4. Returns [k mod 4, r].
+fn _reduce(x) {
+  let k = floor(x / HALF_PI + 0.5)
+  let r = (((x - k * _P1) - k * _P2) - k * _P3) - k * _P3T
+  let q = k % 4
+  if q < 0 { q = q + 4 }
+  return [q, r]
+}
+
+fn _sin_kernel(r) {
+  let r2 = r * r
+  let term = r
+  let total = r
+  let n = 1
+  while n <= 13 {
+    term = -term * r2 / ((2 * n) * (2 * n + 1))
+    total = total + term
+    n = n + 1
+  }
+  return total
+}
+
+fn _cos_kernel(r) {
+  let r2 = r * r
+  let term = 1.0
+  let total = 1.0
+  let n = 1
+  while n <= 13 {
+    term = -term * r2 / ((2 * n - 1) * (2 * n))
+    total = total + term
+    n = n + 1
+  }
+  return total
+}
+
+fn sin(x) {
+  let rr = _reduce(x)
+  let q = rr[0]
+  let r = rr[1]
+  if q == 0 { return _sin_kernel(r) }
+  if q == 1 { return _cos_kernel(r) }
+  if q == 2 { return -_sin_kernel(r) }
+  return -_cos_kernel(r)
+}
+
+fn cos(x) {
+  let rr = _reduce(x)
+  let q = rr[0]
+  let r = rr[1]
+  if q == 0 { return _cos_kernel(r) }
+  if q == 1 { return -_sin_kernel(r) }
+  if q == 2 { return -_cos_kernel(r) }
+  return _sin_kernel(r)
+}
+
+fn tan(x) {
+  let c = cos(x)
+  if c == 0 { _err("LarzValueError", "tan(): undefined here") }
+  return sin(x) / c
+}
+
+# atan on [0, 1]: halve the angle twice (t -> t / (1 + sqrt(1 + t^2))) so the
+# Taylor series sees |t| <= 0.2, then multiply back by 4.
+fn _atan_unit(a) {
+  let t = a
+  t = t / (1.0 + sqrt_(1.0 + t * t))
+  t = t / (1.0 + sqrt_(1.0 + t * t))
+  let t2 = t * t
+  let power = t
+  let total = 0.0
+  let n = 1
+  let sign = 1.0
+  while n <= 27 {
+    total = total + sign * power / n
+    power = power * t2
+    sign = -sign
+    n = n + 2
+  }
+  return 4.0 * total
+}
+
+fn atan(x) {
+  let s = x < 0 ? -1.0 : 1.0
+  let a = abs(x)
+  if a > 1.0 { return s * (HALF_PI - _atan_unit(1.0 / a)) }
+  return s * _atan_unit(a)
+}
+
+fn atan2(y, x) {
+  if x == 0 {
+    if y > 0 { return HALF_PI }
+    if y < 0 { return -HALF_PI }
+    return 0.0
+  }
+  let a = atan(y / x)
+  if x > 0 { return a }
+  return y >= 0 ? a + PI : a - PI
+}
+
+fn asin(x) {
+  if x > 1.0 or x < -1.0 { _err("LarzValueError", "asin(): argument must be in [-1, 1]") }
+  return atan2(x, sqrt_((1.0 - x) * (1.0 + x)))
+}
+
+fn acos(x) {
+  if x > 1.0 or x < -1.0 { _err("LarzValueError", "acos(): argument must be in [-1, 1]") }
+  return atan2(sqrt_((1.0 - x) * (1.0 + x)), x)
+}
+
+fn radians(deg) { return deg * PI / 180.0 }
+fn degrees(rad) { return rad * 180.0 / PI }
+
+# ---------------------------------------------------------------- hyperbolic
+
+fn sinh(x) {
+  if abs(x) < 0.5 {      # series here: (e^x - e^-x)/2 cancels badly for small x
+    let x2 = x * x
+    let term = x
+    let total = x
+    let n = 1
+    while n <= 12 {
+      term = term * x2 / ((2 * n) * (2 * n + 1))
+      total = total + term
+      n = n + 1
+    }
+    return total
+  }
+  let ex = exp(x)
+  return (ex - 1.0 / ex) / 2.0
+}
+
+fn cosh(x) {
+  let ex = exp(abs(x))
+  return (ex + 1.0 / ex) / 2.0
+}
+
+fn tanh(x) {
+  if x > 20.0 { return 1.0 }
+  if x < -20.0 { return -1.0 }
+  if abs(x) < 0.5 { return sinh(x) / cosh(x) }
+  let e2 = exp(2.0 * x)
+  return (e2 - 1.0) / (e2 + 1.0)
+}
+
+# ---------------------------------------------------------------- inverse hyperbolic, log1p
+
+# ln(1 + y), accurate even when y is tiny (ln(1 + 1e-12) computed naively loses 4 digits)
+fn log1p(y) {
+  if y <= -1.0 { _err("LarzValueError", "log1p(): argument must be greater than -1") }
+  if abs(y) < 0.25 {
+    let z = y / (2.0 + y)                 # ln(1+y) = 2 atanh(y / (2 + y))
+    let z2 = z * z
+    let power = z
+    let total = 0.0
+    let n = 1
+    while n <= 41 {
+      total = total + power / n
+      power = power * z2
+      n = n + 2
+    }
+    return 2.0 * total
+  }
+  return ln(1.0 + y)
+}
+
+fn atanh(x) {
+  if x >= 1.0 or x <= -1.0 { _err("LarzValueError", "atanh(): argument must be in (-1, 1)") }
+  let a = abs(x)                           # odd function: work with |x| so 1 + y never cancels
+  let r = 0.5 * log1p(2.0 * a / (1.0 - a))
+  return x < 0 ? -r : r
+}
+
+fn asinh(x) {
+  let a = abs(x)
+  let r = log1p(a + a * a / (1.0 + sqrt_(1.0 + a * a)))
+  return x < 0 ? -r : r
+}
+
+fn acosh(x) {
+  if x < 1.0 { _err("LarzValueError", "acosh(): argument must be at least 1") }
+  let t = x - 1.0
+  return log1p(t + sqrt_(t * (2.0 + t)))
+}
+
+# ---------------------------------------------------------------- formatting
+# str() shows 6 significant digits. These give you control.
+
+fn _digits(n) {          # non-negative whole number -> its decimal digits
+  if n < 10 { return str(int(n)) }
+  let out = ""
+  let v = n
+  while v >= 10 {
+    let d = v % 10
+    out = str(int(d)) + out
+    v = floor(v / 10)
+  }
+  return str(int(v)) + out
+}
+
+# fixed(x, d): x with exactly d digits after the point, e.g. fixed(3.14159, 2) = "3.14"
+fn fixed(x, d) {
+  let neg = x < 0
+  let scale = pow(10, d)
+  let scaled = round(abs(x) * scale)
+  let ip = floor(scaled / scale)
+  let fp = scaled - ip * scale
+  let s = _digits(ip)
+  if d > 0 {
+    let f = _digits(fp)
+    while len(f) < d { f = "0" + f }
+    s = s + "." + f
+  }
+  if neg and scaled != 0 { s = "-" + s }
+  return s
+}
+
+# sci(x, d): scientific notation with d digits after the point, e.g. sci(6.62607015e-34, 3) = "6.626e-34"
+fn sci(x, d) {
+  if x == 0 { return fixed(0, d) + "e+00" }
+  let neg = x < 0
+  let m = abs(x)
+  let e = 0
+  while m >= 10.0 { m = m / 10.0; e = e + 1 }
+  while m < 1.0 { m = m * 10.0; e = e - 1 }
+  let scale = pow(10, d)
+  let mm = round(m * scale)
+  if mm >= 10 * scale { mm = round(mm / 10); e = e + 1 }
+  let ip = floor(mm / scale)
+  let fp = mm - ip * scale
+  let s = _digits(ip)
+  if d > 0 {
+    let f = _digits(fp)
+    while len(f) < d { f = "0" + f }
+    s = s + "." + f
+  }
+  let ae = abs(e)
+  let es = _digits(ae)
+  if len(es) < 2 { es = "0" + es }
+  return (neg ? "-" : "") + s + "e" + (e < 0 ? "-" : "+") + es
+}
+
+# sig(x, n): n significant digits, fixed notation when it reads naturally, else scientific.
+fn sig(x, n) {
+  if x == 0 { return "0" }
+  let a = abs(x)
+  if a >= 1000000.0 or a < 0.0001 { return sci(x, n - 1) }
+  let e = 0
+  let m = a
+  while m >= 10.0 { m = m / 10.0; e = e + 1 }
+  while m < 1.0 { m = m * 10.0; e = e - 1 }
+  let places = n - 1 - e
+  if places < 0 { places = 0 }
+  return fixed(x, places)
+}

@@ -1,0 +1,95 @@
+# complex - complex numbers for Larzscript (which has only real doubles).
+#
+# A complex number is a two-element list [re, im]. All functions are pure.
+#
+#   import "complex" as cx
+#   let z = cx.c(3, 4)
+#   print(cx.abs(z))                    # 5
+#   print(cx.str(cx.exp(cx.c(0, 3.141592653589793)), 6))   # -1.000000+0.000000i  (Euler)
+#
+# Built on physmath (sin/cos/exp/ln/atan2), so accuracy is ~1e-15 relative;
+# checked against Python's cmath in tests/test_complex.lz.
+
+import "physmath" as m
+
+let ZERO = [0.0, 0.0]
+let ONE = [1.0, 0.0]
+let I = [0.0, 1.0]
+
+fn c(re, im) { return [re + 0.0, im + 0.0] }
+fn real(z) { return z[0] }
+fn imag(z) { return z[1] }
+
+fn add(a, b) { return [a[0] + b[0], a[1] + b[1]] }
+fn sub(a, b) { return [a[0] - b[0], a[1] - b[1]] }
+fn neg(a) { return [-a[0], -a[1]] }
+fn mul(a, b) { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]] }
+fn scale(a, s) { return [a[0] * s, a[1] * s] }
+fn conj(a) { return [a[0], -a[1]] }
+
+fn abs2(a) { return a[0] * a[0] + a[1] * a[1] }
+fn abs(a) { return m.hypot(a[0], a[1]) }
+fn arg(a) { return m.atan2(a[1], a[0]) }
+
+fn div(a, b) {
+  let d = b[0] * b[0] + b[1] * b[1]
+  if d == 0 { throw {"type": "LarzValueError", "message": "complex division by zero"} }
+  return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]
+}
+
+fn inv(a) { return div(ONE, a) }
+
+fn from_polar(r, theta) { return [r * m.cos(theta), r * m.sin(theta)] }
+fn polar(a) { return [abs(a), arg(a)] }
+
+# e^(a + bi) = e^a (cos b + i sin b)
+fn exp(a) {
+  let ea = m.exp(a[0])
+  return [ea * m.cos(a[1]), ea * m.sin(a[1])]
+}
+
+# principal natural logarithm
+fn ln(a) {
+  if a[0] == 0 and a[1] == 0 { throw {"type": "LarzValueError", "message": "complex ln(0)"} }
+  return [m.ln(abs(a)), arg(a)]
+}
+
+# whole-number power by repeated squaring (exact for small n; no angle error)
+fn powi(a, n) {
+  if n == 0 { return ONE }
+  if n < 0 { return powi(inv(a), -n) }
+  let result = ONE
+  let base = a
+  let k = n
+  while k > 0 {
+    if k % 2 == 1 { result = mul(result, base) }
+    base = mul(base, base)
+    k = floor(k / 2)
+  }
+  return result
+}
+
+# principal square root
+fn sqrt(a) {
+  let r = abs(a)
+  if r == 0 { return ZERO }
+  let re = m.sqrt_(0.5 * (r + a[0]))
+  let im = m.sqrt_(0.5 * (r - a[0]))
+  return [re, a[1] < 0 ? -im : im]
+}
+
+# e^(2 pi i k / n): the k-th n-th root of unity (used by the Fourier transform)
+fn root_of_unity(k, n) { return from_polar(1.0, m.TAU * k / n) }
+
+# tolerance comparison
+fn close(a, b, tol) { return abs(sub(a, b)) <= tol }
+
+# "0.7071+0.7071i" with d decimals
+fn str(a, d) {
+  let re = m.fixed(a[0], d)
+  let imv = m.fixed(abs_real(a[1]), d)
+  let sign = (a[1] < 0 and imv != m.fixed(0, d)) ? "-" : "+"
+  return re + sign + imv + "i"
+}
+
+fn abs_real(x) { return x < 0 ? -x : x }

@@ -1,0 +1,6 @@
+a = 2: period 4  factors [3, 5]
+a = 7: period 4  factors [3, 5]
+a = 8: period 4  factors [3, 5]
+a = 11: period 2  factors [5, 3]
+a = 13: period 4  factors [3, 5]
+a = 14: nil   (14 = -1 mod 15: a known failure case)

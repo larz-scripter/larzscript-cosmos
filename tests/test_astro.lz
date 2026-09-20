@@ -1,0 +1,76 @@
+import "harness" as t
+import "astro" as a
+import "physconst" as k
+import "physmath" as m
+import "data_physics" as ref
+
+t.suite("astro: distances and light")
+t.close(a.light_travel_time_s(k.AU), 499.004783836, 0.00000000001, "sunlight takes 499.005 s (8.32 min) to reach Earth")
+t.close(a.light_travel_time_years(4.24 * k.ly), 4.24, 0.000000000000002, "light from a star 4.24 ly away is 4.24 years old")
+t.close(a.parallax_distance_pc(0.76813), 1.3018, 0.0001, "Proxima Centauri (parallax 0.768 arcsec) is 1.30 pc away")
+t.close(a.pc_to_ly(1.0), 3.26156377716743, 0.0000000000001, "1 pc = 3.2616 ly")
+t.close(a.ly_to_pc(a.pc_to_ly(7.5)), 7.5, 0.000000000000003, "pc <-> ly round trip")
+t.close(a.m_to_au(a.au_to_m(3.3)), 3.3, 0.000000000000003, "AU round trip")
+t.raises(fn() { a.parallax_distance_pc(0) }, "zero parallax rejected")
+
+t.suite("astro: stars vs independent floats")
+let worst = 0.0
+for row in ref.REF_STAR {
+  for pair in [[a.star_luminosity_w(row[0], row[1]), row[2]], [a.star_radius_m(row[2], row[1]), row[0]], [a.star_temperature_k(row[2], row[0]), row[1]], [a.wien_peak_wavelength_m(row[1]), row[5]]] {
+    let e = abs(pair[0] - pair[1]) / pair[1]
+    if e > worst { worst = e }
+  }
+}
+t.check(worst < 0.00000000000005, "Stefan-Boltzmann (L, R, T inversions) and Wien over 15 random stars (worst " + m.sci(worst, 2) + ")")
+worst = 0.0
+for row in ref.REF_MAG { let e = abs(a.absolute_magnitude(row[0]) - row[1]); if e > worst { worst = e } }
+t.check(worst < 0.000000000001, "absolute magnitude (worst abs error " + m.sci(worst, 2) + ")")
+worst = 0.0
+for row in ref.REF_DISTMOD { let e = abs(a.distance_modulus(row[0]) - row[1]); if e > worst { worst = e } }
+t.check(worst < 0.000000000001, "distance modulus")
+t.close(a.luminosity_from_absolute_magnitude(a.absolute_magnitude(7.7 * pow(10, 29))), 7.7 * pow(10, 29), 0.00000000001, "magnitude <-> luminosity round trip") 
+t.close(a.distance_from_modulus_pc(a.distance_modulus(432.1)), 432.1, 0.0000000000001, "distance modulus round trip")
+t.close(a.absolute_magnitude(k.L_sun), 4.74, 0.0, "the Sun has M_bol = 4.74 by definition")
+t.close(a.distance_modulus(10.0), 0.0, 0.0, "10 pc has distance modulus 0")
+t.close(a.distance_modulus(100.0), 5.0, 0.000000000001, "100 pc has distance modulus 5")
+t.close(a.star_luminosity_w(k.R_sun, k.T_sun), k.L_sun, 0.0002, "the Sun's L from R and T alone = 3.828e26 W")
+t.close(a.wien_peak_wavelength_m(k.T_sun) * 1000000000.0, 501.9, 0.001, "the Sun peaks near 502 nm (green-blue)")
+t.close(a.wien_temperature_k(0.0000005), 5795.5, 0.0001, "a 500 nm peak means 5796 K")
+t.close(a.flux_w_m2(k.L_sun, k.AU), 1361.0, 0.001, "solar constant at 1 AU: 1361 W/m^2")
+
+t.suite("astro: planets")
+worst = 0.0
+for row in ref.REF_EQTEMP { let e = abs(a.equilibrium_temperature_k(row[0], row[1], row[2], row[3]) - row[4]) / row[4]; if e > worst { worst = e } }
+t.check(worst < 0.00000000000003, "equilibrium temperature over 15 random systems (worst " + m.sci(worst, 2) + ")")
+t.close(a.equilibrium_temperature_k(k.T_sun, k.R_sun, k.AU, 0.3), 254.3, 0.003, "Earth's equilibrium temperature: ~255 K (surface is 288 K - the greenhouse effect)")
+t.close(a.equilibrium_temperature_k(k.T_sun, k.R_sun, k.AU, 0.0), 278.6, 0.001, "black-body Earth: 278.6 K")
+t.close(a.orbit_for_temperature_m(k.L_sun, a.equilibrium_temperature_k(k.T_sun, k.R_sun, 2.0 * k.AU, 0.3), 0.3) / k.AU, 2.0, 0.0002, "orbit <-> temperature inversion")
+t.close(a.transit_depth(k.R_earth, k.R_sun), 0.0000840, 0.005, "an Earth transiting the Sun blocks 84 ppm")
+t.close(a.transit_depth(k.R_jup, k.R_sun), 0.01056, 0.002, "Jupiter blocks 1.06%")
+t.close(a.surface_gravity(k.GM_earth, k.R_earth), 9.798, 0.0005, "Earth surface gravity ~9.80 m/s^2")
+t.close(a.surface_gravity(k.GM_jup, k.R_jup), 24.79, 0.0005, "Jupiter surface gravity 24.8 m/s^2")
+t.close(a.escape_speed(k.GM_earth, k.R_earth) / 1000.0, 11.1799, 0.0001, "escape speed at the equatorial radius: 11.18 km/s")
+t.close(a.escape_speed(k.GM_earth, 6371000.0) / 1000.0, 11.186, 0.0002, "... and the familiar 11.186 km/s at the mean radius 6371 km")
+t.close(a.orbital_period_s(k.AU, k.GM_sun) / k.day, 365.2568, 0.00001, "1 AU orbit around the Sun: 365.26 days")
+t.close(a.semi_major_from_period_m(a.orbital_period_s(7.78 * pow(10, 11), k.GM_sun), k.GM_sun), 7.78 * pow(10, 11), 0.00000000000001, "Kepler's third law round trip")
+t.close(a.orbital_period_s(5.2 * k.AU, k.GM_sun) / k.year, 11.86, 0.001, "an orbit at 5.2 AU (Jupiter) takes 11.9 years")
+worst = 0.0
+for row in ref.REF_KEPLER { let e = abs(a.orbital_period_s(row[0], row[1]) - row[2]) / row[2]; if e > worst { worst = e } }
+t.check(worst < 0.000000000000005, "Kepler's third law over 15 random orbits")
+
+t.suite("astro: cosmology (flat LCDM)")
+for row in ref.REF_COSMO {
+  t.close(a.comoving_distance_mpc(row[0], row[1], row[2]), row[3], 0.000000005, "comoving distance z=" + str(row[0]) + " H0=" + str(row[1]) + " Om=" + str(row[2]))
+  t.close(a.age_gyr_at_redshift(row[0], row[1], row[2]), row[4], 0.0000001, "age at z=" + str(row[0]) + " matches the closed form (asinh)")
+}
+for row in ref.REF_EDS { t.close(a.comoving_distance_mpc(row[0], 70.0, 1.0), row[1], 0.000000005, "Einstein-de Sitter: exact D_C at z=" + str(row[0])) }
+t.close(a.hubble_age_gyr(70.0, 1.0), 2.0 / 3.0 * 13.9684, 0.0002, "Einstein-de Sitter age = 2/(3 H0) = 9.31 Gyr")
+t.close(a.hubble_age_gyr(67.4, 0.315), 13.8, 0.005, "Planck 2018 cosmology: age ~13.8 Gyr")
+t.close(a.comoving_distance_mpc(1.0, 67.4, 0.315), 3400.0, 0.005, "comoving distance to z=1: ~3.4 Gpc")
+t.close(a.luminosity_distance_mpc(1.0, 67.4, 0.315), 6800.0, 0.005, "luminosity distance to z=1: ~6.8 Gpc")
+t.close(a.angular_diameter_distance_mpc(1.0, 67.4, 0.315), 1700.0, 0.005, "angular-diameter distance to z=1: ~1.7 Gpc")
+t.check(a.hubble_age_gyr(73.0, 0.3) < a.hubble_age_gyr(67.4, 0.315), "the higher local H0 (73) gives a YOUNGER universe - the 'Hubble tension'")
+t.close(a.comoving_distance_mpc(0.001, 70.0, 0.3), 0.001 * 299792.458 / 70.0, 0.001, "at low z, Hubble's law: d = c z / H0")
+t.close(a.lookback_time_gyr(1.0, 67.4, 0.315), 7.9, 0.01, "light from z=1 left ~7.9 billion years ago")
+t.close(a.hubble_velocity_kms(70.0, 100.0), 7000.0, 0.0, "Hubble law: 100 Mpc recedes at 7000 km/s")
+t.finish()

@@ -1,0 +1,13 @@
+# The Bell state: two qubits that always agree, though each alone is a fair coin.
+import "quantum" as q
+
+let s = q.zero(2)            # |00>
+q.h(s, 0)                    # qubit 0 into an equal superposition
+q.cnot(s, 0, 1)              # entangle qubit 1 with it
+
+print("state:      " + q.state_str(s, 4))
+print("entangled:  " + str(q.entropy(s, 0)) + " bit")
+print("<ZZ> = " + str(q.expect_pauli(s, "ZZ")) + "   <XX> = " + str(q.expect_pauli(s, "XX")) + "   <YY> = " + str(q.expect_pauli(s, "YY")))
+q.seed(2026)
+print("1000 shots: " + str(q.sample(s, 1000)))
+print(q.draw(2, [["h", 0], ["cnot", 0, 1]]))

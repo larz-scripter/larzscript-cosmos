@@ -1,0 +1,99 @@
+import "harness" as t
+import "qmech" as qm
+import "physconst" as k
+import "physmath" as m
+
+t.suite("qmech: hydrogen - agrees with measured spectra")
+t.close(qm.hydrogen_energy_ev(1, true), -13.605693122994, 0.0000000001, "infinite-mass ground state = -Rydberg energy")
+t.close(qm.hydrogen_ionization_ev(1), 13.598434599702, 0.00002, "ionization energy vs NIST 13.598435 eV (Bohr model, 11 ppm)")
+t.close(qm.hydrogen_energy_ev(2, true), qm.hydrogen_energy_ev(1, true) / 4.0, 0.000000000000002, "E_n scales as 1/n^2")
+t.close(qm.hydrogen_wavelength_nm(2, 1), 121.567, 0.00005, "Lyman-alpha = 121.567 nm")
+t.close(qm.vacuum_to_air_nm(qm.hydrogen_wavelength_nm(3, 2)), 656.28, 0.00003, "H-alpha (air) = 656.28 nm")
+t.close(qm.vacuum_to_air_nm(qm.hydrogen_wavelength_nm(4, 2)), 486.13, 0.00004, "H-beta (air) = 486.13 nm")
+t.close(qm.vacuum_to_air_nm(qm.hydrogen_wavelength_nm(5, 2)), 434.05, 0.00004, "H-gamma (air) = 434.05 nm")
+t.close(qm.vacuum_to_air_nm(qm.hydrogen_wavelength_nm(6, 2)), 410.17, 0.00004, "H-delta (air) = 410.17 nm")
+t.close(qm.vacuum_to_air_nm(qm.hydrogen_series_limit_nm(2)), 364.6, 0.0001, "Balmer limit (air) = 364.6 nm")
+t.close(qm.hydrogen_wavelength_nm(3, 2), 656.4696, 0.00002, "H-alpha vacuum wavelength")
+t.check(qm.hydrogen_wavelength_nm(3, 2, true) < qm.hydrogen_wavelength_nm(3, 2), "infinite nuclear mass shifts lines to shorter wavelengths (reduced-mass effect)")
+t.close(qm.hydrogen_radius_m(1) * 10000000000.0, 0.529177, 0.000001, "Bohr radius = 0.529177 angstrom")
+t.close(qm.hydrogen_radius_m(3), 9.0 * k.a0, 0.0, "r_n = n^2 a0")
+t.equal(qm.hydrogen_series(2), "Balmer (visible)", "series names")
+t.raises(fn() { qm.hydrogen_wavelength_nm(2, 3) }, "absorption direction is rejected")
+t.raises(fn() { qm.hydrogen_energy_ev(0) }, "n = 0 is rejected")
+
+t.suite("qmech: photons and de Broglie waves")
+t.close(qm.photon_energy_ev(0.0000005), 2.479684, 0.000001, "500 nm photon = 2.4797 eV")
+t.close(qm.photon_wavelength_m(qm.photon_energy_j(0.0000005)), 0.0000005, 0.000000000000003, "energy <-> wavelength round trip")
+t.close(qm.photon_energy_ev(0.000000121567) - qm.photon_energy_ev(0.0000005), 10.2 - 2.4797, 0.0002, "Lyman-alpha photon carries ~10.2 eV")
+t.close(qm.de_broglie_from_voltage(k.m_e, k.e, 100.0), 0.00000000012264, 0.0001, "electron at 100 V: 0.1226 nm")
+t.close(qm.de_broglie_from_voltage(k.m_e, k.e, 54.0), 0.0000000001669, 0.001, "Davisson-Germer 54 V electron: 0.167 nm")
+t.close(qm.de_broglie_wavelength(k.m_n, 2200.0), 0.0000000001798, 0.001, "thermal neutron at 2200 m/s: 1.80 angstrom")
+t.close(qm.de_broglie_wavelength(0.145, 40.0), 0.000000000000000000000000000000114, 0.001, "a baseball's wavelength is ~1e-34 m (utterly unobservable)")
+t.close(qm.min_velocity_uncertainty(k.m_e, 0.0000000001), 578840.0, 0.0001, "electron confined to 1 angstrom: dv >= 5.79e5 m/s")
+
+t.suite("qmech: particle in a box")
+t.close(qm.box_energy_ev(1, k.m_e, 0.000000001), 0.37603, 0.00005, "electron in a 1 nm box: E1 = 0.376 eV")
+t.close(qm.box_energy_ev(3, k.m_e, 0.000000001), 9.0 * qm.box_energy_ev(1, k.m_e, 0.000000001), 0.000000000000003, "E_n = n^2 E_1")
+t.close(qm.box_energy_ev(1, k.m_e, 0.0000000001), 37.603, 0.00005, "electron in a 1 angstrom box: E1 = 37.6 eV")
+for n in [1, 2, 3, 7] {
+  t.close(qm.box_probability(n, 2.0, 0.0, 2.0), 1.0, 0.000000000000003, "n=" + str(n) + ": total probability = 1")
+  t.close(qm.box_probability(n, 2.0, 0.0, 1.0), 0.5, 0.000000000000003, "n=" + str(n) + ": left half = 1/2")
+}
+t.close(qm.box_probability(1, 3.0, 1.0, 2.0), 1.0 / 3.0 + sqrt(3.0) / (2.0 * m.PI), 0.000000000000003, "ground state, middle third: 1/3 + sqrt(3)/2pi = 0.609")
+t.close(qm.box_density(2, 1.0, 0.5), 0.0, 0.000000000001, "n=2 has a node at the centre")
+t.close(qm.box_density(1, 1.0, 0.5), 2.0, 0.000000000000003, "n=1 peaks at 2/L")
+
+t.suite("qmech: harmonic oscillator")
+t.close(qm.oscillator_zero_point_j(100000000000000.0), 0.5 * k.hbar * 100000000000000.0, 0.0, "zero-point energy = hbar omega / 2")
+t.close(qm.oscillator_energy_j(3, 5.0) - qm.oscillator_energy_j(2, 5.0), k.hbar * 5.0, 0.000000000000003, "levels are equally spaced by hbar omega")
+
+t.suite("qmech: tunneling")
+let mev = k.m_e
+let ev = k.eV
+# independent Python evaluation (math.sinh) of T = 1/(1 + V0^2 sinh^2(kappa a) / (4 E (V0 - E)))
+t.close(qm.tunneling_probability(1.0 * ev, 2.0 * ev, 0.0000000002, mev), 0.40440650360676494, 0.00000000000001, "1 eV electron, 2 eV barrier, 0.2 nm: T = 0.4044")
+t.close(qm.tunneling_probability(1.0 * ev, 5.0 * ev, 0.0000000005, mev), 0.00009084579449542765, 0.00000000000001, "1 eV electron, 5 eV barrier, 0.5 nm: T = 9.08e-5")
+t.close(qm.tunneling_probability(1.0 * ev, 3.0 * ev, 0.0000000003, mev), 0.045106047704417736, 0.00000000000001, "1 eV electron, 3 eV barrier, 0.3 nm: T = 0.0451")
+t.close(qm.tunneling_probability(0.5 * ev, 1.0 * ev, 0.000000001, mev), 0.002850146729031845, 0.00000000000001, "0.5 eV electron, 1 eV barrier, 1 nm: T = 0.00285")
+t.close(qm.tunneling_probability(1.0 * ev, 2.0 * ev, 0.000000000001, mev), 0.9999737536168969, 0.00000000000001, "a 1 picometre barrier is almost transparent: T = 0.99997")
+let prev = 1.0
+let decreasing = true
+for w in [0.1, 0.2, 0.4, 0.8, 1.6] {
+  let p = qm.tunneling_probability(1.0 * ev, 3.0 * ev, w * 0.000000001, mev)
+  if p >= prev { decreasing = false }
+  prev = p
+}
+t.check(decreasing, "transmission falls as the barrier widens")
+let e1 = 2.0 * ev
+t.close(qm.tunneling_probability(e1 * 0.999999, 2.0 * ev * 1.0, 0.0000000003, mev), qm.tunneling_probability(e1, 2.0 * ev, 0.0000000003, mev), 0.00001, "continuous across E = V0 (from below)")
+t.close(qm.tunneling_probability(e1 * 1.000001, 2.0 * ev, 0.0000000003, mev), qm.tunneling_probability(e1, 2.0 * ev, 0.0000000003, mev), 0.00001, "continuous across E = V0 (from above)")
+# resonance above the barrier: k a = pi  ->  T = 1
+let big_e = 3.0 * ev
+let kk = sqrt(2.0 * mev * (big_e - 1.0 * ev)) / k.hbar
+t.close(qm.tunneling_probability(big_e, 1.0 * ev, m.PI / kk, mev), 1.0, 0.000000000001, "above-barrier resonance (k a = pi) transmits perfectly")
+# thick barrier: T -> 16 E (V0 - E)/V0^2 * exp(-2 kappa a)
+let ee = 1.0 * ev
+let v0 = 4.0 * ev
+let wide = 0.000000001
+let kap = qm.tunneling_kappa(ee, v0, mev)
+t.close(qm.tunneling_probability(ee, v0, wide, mev) / (16.0 * ee * (v0 - ee) / (v0 * v0) * m.exp(-2.0 * kap * wide)), 1.0, 0.00001, "thick-barrier limit matches the WKB form")
+# a very thick barrier: sinh(kappa a) would overflow; the asymptotic form takes over and stays continuous
+let kk2 = qm.tunneling_kappa(1.0 * ev, 5.0 * ev, mev)
+let aa = 290.0 / kk2
+t.close(qm.tunneling_probability(1.0 * ev, 5.0 * ev, aa, mev), 16.0 * 1.0 * 4.0 / 25.0 * m.exp(-2.0 * kk2 * aa), 0.000000000000001, "just below the switch-over the exact and asymptotic forms agree")
+t.close(qm.tunneling_probability(1.0 * ev, 5.0 * ev, 310.0 / kk2, mev), 16.0 * 1.0 * 4.0 / 25.0 * m.exp(-620.0), 0.00000000001, "thick barrier (kappa a = 310) no longer overflows")
+t.check(qm.tunneling_probability(1.0 * ev, 5.0 * ev, 0.00000005, mev) >= 0.0, "a 50 nm barrier returns a (vanishing) probability instead of throwing")
+t.raises(fn() { qm.tunneling_probability(-1.0, 1.0, 1.0, 1.0) }, "negative energy rejected")
+
+t.suite("qmech: relativistic de Broglie (electron microscopes)")
+fn pm(x) { return x * pow(10, -12) }
+t.close(qm.de_broglie_from_voltage_relativistic(k.m_e, k.e, 100000.0), pm(3.701437), 0.000001, "100 kV electrons: 3.70 pm (TEM)")
+t.close(qm.de_broglie_from_voltage_relativistic(k.m_e, k.e, 200000.0), pm(2.507934), 0.000001, "200 kV electrons: 2.51 pm")
+t.close(qm.de_broglie_from_voltage_relativistic(k.m_e, k.e, 300000.0), pm(1.968749), 0.000001, "300 kV electrons: 1.97 pm")
+t.close(qm.de_broglie_from_voltage_relativistic(k.m_e, k.e, 1000000.0), pm(0.8719187), 0.000001, "1 MV electrons: 0.872 pm")
+t.close(qm.de_broglie_from_voltage(k.m_e, k.e, 100000.0), pm(3.878299), 0.000001, "the non-relativistic formula gives 3.88 pm at 100 kV: 4.8% too long")
+t.close(qm.de_broglie_relativistic(k.m_e, 0.5 * k.c), pm(4.2024926083), 0.000000001, "electron at 0.5c: 4.20 pm")
+t.close(qm.de_broglie_relativistic(k.m_e, 1000.0), qm.de_broglie_wavelength(k.m_e, 1000.0), 0.0000001, "the two agree at low speed")
+t.close(qm.de_broglie_relativistic(k.m_e, 0.5 * k.c), qm.de_broglie_from_voltage_relativistic(k.m_e, k.e, k.m_e * k.c * k.c * (1.0 / sqrt(1.0 - 0.25) - 1.0) / k.e), 0.000000000001, "speed and voltage forms agree")
+t.raises(fn() { qm.de_broglie_relativistic(k.m_e, k.c) }, "speed of light rejected")
+t.finish()

@@ -1,0 +1,109 @@
+import "harness" as t
+import "quantum" as q
+import "physmath" as m
+import "data_quantum" as ref
+
+t.suite("quantum: random circuits vs an independent dense-matrix simulator")
+let worst_amp = 0.0
+let worst_pauli = 0.0
+let worst_bloch = 0.0
+let worst_ent = 0.0
+let worst_norm = 0.0
+for c in ref.CASES {
+  let n = c[0]
+  let s = q.run(n, c[1])
+  for i in range(2 ** n) {
+    let e = abs(s["re"][i] - c[2][i]) + abs(s["im"][i] - c[3][i])
+    if e > worst_amp { worst_amp = e }
+  }
+  let ep = abs(q.expect_pauli(s, c[4]) - c[5])
+  if ep > worst_pauli { worst_pauli = ep }
+  let bl = q.bloch(s, c[6])
+  for j in range(3) { let e = abs(bl[j] - c[7][j]); if e > worst_bloch { worst_bloch = e } }
+  let ee = abs(q.entropy(s, c[6]) - c[8])
+  if ee > worst_ent { worst_ent = ee }
+  let nn = abs(q.norm(s) - 1.0)
+  if nn > worst_norm { worst_norm = nn }
+}
+t.check(worst_amp < 0.000000000001, "all " + str(len(ref.CASES)) + " statevectors match (worst amplitude error " + m.sci(worst_amp, 2) + ")")
+t.check(worst_pauli < 0.000000000001, "Pauli-string expectations match (worst " + m.sci(worst_pauli, 2) + ")")
+t.check(worst_bloch < 0.000000000001, "Bloch vectors match (worst " + m.sci(worst_bloch, 2) + ")")
+t.check(worst_ent < 0.00000001, "entanglement entropies match (worst " + m.sci(worst_ent, 2) + ")")
+t.check(worst_norm < 0.000000000001, "every circuit stays normalised (unitarity), worst " + m.sci(worst_norm, 2))
+
+t.suite("quantum: textbook states")
+let bell = q.zero(2)
+q.h(bell, 0); q.cnot(bell, 0, 1)
+t.close(q.amplitude(bell, "00")[0], 0.7071067811865476, 0.000000000000002, "Bell: <00|psi> = 1/sqrt2")
+t.close(q.amplitude(bell, "11")[0], 0.7071067811865476, 0.000000000000002, "Bell: <11|psi> = 1/sqrt2")
+t.close(q.amplitude(bell, "01")[0], 0.0, 0.000000000000002, "Bell: <01|psi> = 0")
+t.close(q.entropy(bell, 0), 1.0, 0.000000000001, "Bell state carries exactly 1 bit of entanglement")
+t.close(q.expect_pauli(bell, "ZZ"), 1.0, 0.000000000001, "Bell: <ZZ> = +1")
+t.close(q.expect_pauli(bell, "XX"), 1.0, 0.000000000001, "Bell: <XX> = +1")
+t.close(q.expect_pauli(bell, "YY"), -1.0, 0.000000000001, "Bell: <YY> = -1")
+t.equal(q.state_str(bell, 4), "0.7071|00> + 0.7071|11>", "state_str")
+let plus = q.zero(1)
+q.h(plus, 0)
+t.close(q.bloch(plus, 0)[0], 1.0, 0.000000000001, "|+> points along +x")
+let ghz = q.zero(4)
+q.h(ghz, 0); q.cnot(ghz, 0, 1); q.cnot(ghz, 1, 2); q.cnot(ghz, 2, 3)
+t.close(q.prob(ghz, 3), 0.5, 0.000000000001, "GHZ: each qubit is 50/50")
+t.close(q.expect_pauli(ghz, "XXXX"), 1.0, 0.000000000001, "GHZ: <XXXX> = +1")
+let s1 = q.zero(1)
+q.x(s1, 0)
+t.close(q.prob(s1, 0), 1.0, 0.0, "X flips |0> to |1>")
+q.h(s1, 0); q.h(s1, 0)
+t.close(q.prob(s1, 0), 1.0, 0.000000000000002, "H H = identity")
+let tt = q.zero(1)
+for i in range(8) { q.t_gate(tt, 0) }
+q.h(tt, 0)
+t.close(q.prob(tt, 0), 0.5, 0.000000000000002, "T^8 = identity on |0> (phase only)")
+let w = q.zero(3)
+q.x(w, 0); q.swap(w, 0, 2)
+t.equal(q.state_str(w, 2), "1.00|001>", "swap moves the flipped qubit")
+let tof = q.basis(3, "110")
+q.ccx(tof, 0, 1, 2)
+t.equal(q.state_str(tof, 2), "1.00|111>", "Toffoli flips the target when both controls are 1")
+let tof2 = q.basis(3, "100")
+q.ccx(tof2, 0, 1, 2)
+t.equal(q.state_str(tof2, 2), "1.00|100>", "Toffoli does nothing with one control off")
+
+t.suite("quantum: measurement is seedable and statistically correct")
+q.seed(2026)
+let counts = q.sample(bell, 20000)
+let n00 = counts.has("00") ? counts["00"] : 0
+let n11 = counts.has("11") ? counts["11"] : 0
+t.equal(n00 + n11, 20000, "Bell samples only ever give 00 or 11")
+t.check(abs(n00 - 10000) < 4 * sqrt(20000 * 0.25), "00 frequency within 4 sigma of 50% (" + str(n00) + "/20000)")
+q.seed(99)
+let first = q.sample(bell, 50)
+q.seed(99)
+let second = q.sample(bell, 50)
+t.equal(str(first), str(second), "same seed, same samples")
+let skew = q.zero(1)
+q.ry(skew, 0, 2.0 * m.asin(sqrt(0.3)))          # P(1) = 0.3
+t.close(q.prob(skew, 0), 0.3, 0.000000000001, "Ry sets P(1) exactly")
+q.seed(5)
+let ones = 0
+for i in range(10000) { let c = q.copy(skew); ones = ones + q.measure(c, 0) }
+t.check(abs(ones - 3000) < 4 * sqrt(10000 * 0.21), "P(1)=0.3 measured " + str(ones) + "/10000")
+let mm = q.zero(2)
+q.h(mm, 0); q.cnot(mm, 0, 1)
+q.seed(11)
+let a = q.measure(mm, 0)
+let b = q.measure(mm, 1)
+t.equal(a, b, "measuring one half of a Bell pair fixes the other")
+t.close(q.norm(mm), 1.0, 0.000000000001, "state is renormalised after measurement")
+
+t.suite("quantum: parsing, drawing, errors")
+t.equal(len(q.parse("h 0; cnot 0 1\nrz 2 pi/2\n# comment\nccx 0 1 2")), 4, "parse counts ops")
+t.close(q.parse("rz 0 2*pi/3")[0][2], 2.0 * m.PI / 3.0, 0.000000000000002, "parse angle 2*pi/3")
+t.check(q.draw(2, q.parse("h 0; cnot 0 1")).contains("o"), "draw shows the control")
+t.raises(fn() { q.h(q.zero(2), 2) }, "gate on a non-existent qubit")
+t.raises(fn() { q.zero(0) }, "zero(0) is rejected")
+t.raises(fn() { q.cnot(q.zero(2), 1, 1) }, "control equals target is rejected")
+t.raises(fn() { q.basis(2, "10x") }, "bad bit string is rejected")
+t.raises(fn() { q.apply_op(q.zero(1), ["nonsense", 0]) }, "unknown gate")
+t.equal(q.bits(5, 4), "0101", "bits() pads to n")
+t.equal(q.from_bits("0101"), 5, "from_bits")
+t.finish()

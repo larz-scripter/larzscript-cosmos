@@ -1,0 +1,8 @@
+# Teleport an unknown qubit state; every one of the four outcomes ends with fidelity 1.
+import "qalgo" as qa
+import "physmath" as m
+
+for outcome in [[0, 0], [0, 1], [1, 0], [1, 1]] {
+  let r = qa.teleport(0.9, 2.1, outcome)
+  print("Alice measures " + str(outcome[0]) + str(outcome[1]) + " -> fidelity " + m.fixed(r["fidelity"], 12) + ", Bob's Bloch vector (" + m.fixed(r["after"][0], 4) + ", " + m.fixed(r["after"][1], 4) + ", " + m.fixed(r["after"][2], 4) + ")")
+}

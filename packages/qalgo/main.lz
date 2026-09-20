@@ -1,0 +1,327 @@
+# qalgo - famous quantum algorithms, run on the `quantum` simulator.
+#
+# Every routine here builds a real circuit (Hadamards, controlled phases, CNOTs) and runs
+# it on the statevector; the results are compared with the textbook formulas in
+# tests/test_qalgo.lz. NOTE: Larzscript's `for i from a to b` counts DOWN when b < a, so
+# this file uses range() for every loop that can be empty.
+#
+#   import "qalgo" as qa
+#   print(qa.shor(15, 7))           # {"period": 4, "factors": [3, 5], ...}
+#   print(qa.grover(4, [11])["p_marked"])     # 0.9613...  (3 iterations of 16 items)
+
+import "physmath" as m
+import "quantum" as q
+
+fn _err(msg) { throw {"type": "LarzValueError", "message": "qalgo: " + msg} }
+
+# ------------------------------------------------------------ quantum Fourier transform
+
+# QFT on qubits first .. first+count-1 (qubit `first` is the most significant).
+# |x> -> (1/sqrt N) sum_y e^(2 pi i x y / N) |y>,  N = 2^count
+fn qft(s, first, count) {
+  for j in range(count) {
+    q.h(s, first + j)
+    for k in range(j + 1, count) { q.cphase(s, first + k, first + j, m.PI / (2 ** (k - j))) }
+  }
+  for i in range(floor(count / 2)) { q.swap(s, first + i, first + count - 1 - i) }
+  return s
+}
+
+fn iqft(s, first, count) {
+  for i in range(floor(count / 2)) { q.swap(s, first + i, first + count - 1 - i) }
+  for jj in range(count) {
+    let j = count - 1 - jj
+    for kk in range(count - 1 - j) {
+      let k = count - 1 - kk
+      q.cphase(s, first + k, first + j, -m.PI / (2 ** (k - j)))
+    }
+    q.h(s, first + j)
+  }
+  return s
+}
+
+# ------------------------------------------------------------ Grover search
+
+fn _hadamard_all(s) { for k in range(s["n"]) { q.h(s, k) } }
+
+# Phase-flip every marked basis state (the "oracle").
+fn oracle_flip(s, marked) {
+  for idx in marked {
+    s["re"][idx] = -s["re"][idx]
+    s["im"][idx] = -s["im"][idx]
+  }
+  return s
+}
+
+# Reflect about the mean: H^n (flip |0>) H^n  (equal to 2|s><s| - I up to a global sign).
+fn diffusion(s) {
+  _hadamard_all(s)
+  oracle_flip(s, [0])
+  _hadamard_all(s)
+  return s
+}
+
+# best whole number of Grover iterations for M marked items among N
+fn optimal_iterations(size, marked_count) {
+  let theta = m.asin(m.sqrt_(marked_count / size))
+  return int(round(m.PI / (4.0 * theta) - 0.5))
+}
+
+# the exact success probability after k iterations: sin^2((2k+1) theta)
+fn grover_theory(size, marked_count, k) {
+  let theta = m.asin(m.sqrt_(marked_count / size))
+  let v = m.sin((2 * k + 1) * theta)
+  return v * v
+}
+
+# Search n qubits (2^n items) for the `marked` indices.
+fn grover(n, marked, iterations=nil) {
+  let size = 2 ** n
+  let k = iterations == nil ? optimal_iterations(size, len(marked)) : iterations
+  let s = q.zero(n)
+  _hadamard_all(s)
+  for i in range(k) { oracle_flip(s, marked); diffusion(s) }
+  let probs = q.probabilities(s)
+  let p = 0.0
+  for idx in marked { p = p + probs[idx] }
+  return {"state": s, "iterations": k, "p_marked": p, "theory": grover_theory(size, len(marked), k)}
+}
+
+# ------------------------------------------------------------ Deutsch-Jozsa
+
+# f: whole number -> 0 or 1, promised constant or balanced on 0 .. 2^n - 1.
+fn deutsch_jozsa(n, f) {
+  let s = q.zero(n)
+  _hadamard_all(s)
+  for i in range(2 ** n) {
+    if f(i) == 1 { s["re"][i] = -s["re"][i]; s["im"][i] = -s["im"][i] }
+  }
+  _hadamard_all(s)
+  let p_zero = s["re"][0] * s["re"][0] + s["im"][0] * s["im"][0]
+  let verdict = "promise violated"
+  if p_zero > 0.999999 { verdict = "constant" }
+  if p_zero < 0.000001 { verdict = "balanced" }
+  return {"verdict": verdict, "p_all_zero": p_zero, "queries": 1}
+}
+
+# ------------------------------------------------------------ Bernstein-Vazirani
+
+fn _parity_and(a, b, n) {   # parity of (a AND b) over n bits
+  let total = 0
+  let x = a
+  let y = b
+  for i in range(n) {
+    total = total + (x % 2) * (y % 2)
+    x = floor(x / 2)
+    y = floor(y / 2)
+  }
+  return total % 2
+}
+
+# Find a hidden bit string in ONE query (classically you need n).
+fn bernstein_vazirani(secret) {
+  let n = len(secret)
+  let sv = q.from_bits(secret)
+  let s = q.zero(n)
+  _hadamard_all(s)
+  for i in range(2 ** n) {
+    if _parity_and(sv, i, n) == 1 { s["re"][i] = -s["re"][i]; s["im"][i] = -s["im"][i] }
+  }
+  _hadamard_all(s)
+  let probs = q.probabilities(s)
+  let best = 0
+  for i in range(len(probs)) { if probs[i] > probs[best] { best = i } }
+  return {"found": q.bits(best, n), "probability": probs[best], "queries": 1}
+}
+
+# ------------------------------------------------------------ teleportation
+
+# Teleport the single-qubit state Ry(theta) then Rz(phi) applied to |0>. `forced` = [m0, m1]
+# post-selects a measurement outcome (each has probability 1/4); nil measures for real.
+fn teleport(theta, phi, forced=nil) {
+  let s = q.zero(3)
+  q.ry(s, 0, theta); q.rz(s, 0, phi)
+  let ref = q.zero(1)
+  q.ry(ref, 0, theta); q.rz(ref, 0, phi)
+  let before = q.bloch(ref, 0)
+  q.h(s, 1); q.cnot(s, 1, 2)          # shared Bell pair on qubits 1 and 2
+  q.cnot(s, 0, 1); q.h(s, 0)          # Alice's Bell-basis measurement circuit
+  let m0 = 0
+  let m1 = 0
+  if forced == nil { m0 = q.measure(s, 0); m1 = q.measure(s, 1) }
+  else { m0 = forced[0]; m1 = forced[1]; q.project(s, 0, m0); q.project(s, 1, m1) }
+  if m1 == 1 { q.x(s, 2) }            # Bob's corrections
+  if m0 == 1 { q.z(s, 2) }
+  let after = q.bloch(s, 2)
+  let dot = before[0] * after[0] + before[1] * after[1] + before[2] * after[2]
+  return {"m0": m0, "m1": m1, "fidelity": (1.0 + dot) / 2.0, "before": before, "after": after}
+}
+
+# ------------------------------------------------------------ quantum phase estimation
+
+# Estimate the phase phi of U = diag(1, e^(2 pi i phi)) with t counting qubits.
+fn phase_estimation(t, phi) {
+  let s = q.zero(t + 1)
+  q.x(s, t)                                     # the eigenstate |1> of U
+  for j in range(t) { q.h(s, j) }
+  for j in range(t) { q.cphase(s, j, t, m.TAU * phi * (2 ** (t - 1 - j))) }
+  iqft(s, 0, t)
+  let probs = q.probabilities(s)
+  let counting = []
+  for y in range(2 ** t) { counting.push(probs[2 * y + 1]) }   # target qubit is |1>
+  let best = 0
+  for y in range(len(counting)) { if counting[y] > counting[best] { best = y } }
+  return {"best": best, "estimate": best / (2 ** t), "probability": counting[best], "distribution": counting}
+}
+
+# ------------------------------------------------------------ CHSH / Bell inequality
+
+# <A(a) x B(b)> for the Bell state (|00>+|11>)/sqrt2, measuring spin along angles a and b in
+# the x-z plane. Computed FROM the simulated state; quantum mechanics says cos(a - b).
+fn chsh_correlation(bell, a, b) {
+  let ca = m.cos(a); let sa = m.sin(a); let cb = m.cos(b); let sb = m.sin(b)
+  return ca * cb * q.expect_pauli(bell, "ZZ") + ca * sb * q.expect_pauli(bell, "ZX") +
+         sa * cb * q.expect_pauli(bell, "XZ") + sa * sb * q.expect_pauli(bell, "XX")
+}
+
+# S = E(a0,b0) + E(a0,b1) + E(a1,b0) - E(a1,b1). Any local-hidden-variable theory has |S| <= 2.
+fn chsh(a0=0.0, a1=1.5707963267948966, b0=0.7853981633974483, b1=-0.7853981633974483) {
+  let bell = q.zero(2)
+  q.h(bell, 0); q.cnot(bell, 0, 1)
+  return chsh_correlation(bell, a0, b0) + chsh_correlation(bell, a0, b1) + chsh_correlation(bell, a1, b0) - chsh_correlation(bell, a1, b1)
+}
+
+# The best any classical (local hidden variable) strategy can do, by brute force over all
+# 16 deterministic assignments of +/-1 to the four measurement settings.
+fn chsh_classical_max() {
+  let best = -100
+  for a0 in [-1, 1] { for a1 in [-1, 1] { for b0 in [-1, 1] { for b1 in [-1, 1] {
+    let v = a0 * b0 + a0 * b1 + a1 * b0 - a1 * b1
+    if v > best { best = v }
+  } } } }
+  return best
+}
+
+# ------------------------------------------------------------ Shor's algorithm (order finding)
+
+fn _bit_length(v) {
+  let n = 0
+  let x = v
+  while x > 0 { n = n + 1; x = floor(x / 2) }
+  return n
+}
+
+fn _modpow(base, e, modulus) {
+  let result = 1
+  let b = base % modulus
+  let k = e
+  while k > 0 {
+    if k % 2 == 1 { result = (result * b) % modulus }
+    b = (b * b) % modulus
+    k = floor(k / 2)
+  }
+  return result
+}
+
+# Controlled modular multiplication as a basis-state permutation on the work register:
+# where `control` is 1 and the work value y < N, send y to (mult * y) mod N.
+fn _controlled_mulmod(s, control, work_bits, mult, modulus) {
+  let n = s["n"]
+  let re = s["re"]
+  let im = s["im"]
+  let size = len(re)
+  let cs = 2 ** (n - 1 - control)
+  let wsize = 2 ** work_bits
+  let newre = re + []
+  let newim = im + []
+  for i in range(size) {
+    if floor(i / cs) % 2 == 1 {
+      let y = i % wsize
+      if y < modulus {
+        let dest = i - y + (mult * y) % modulus
+        newre[dest] = re[i]
+        newim[dest] = im[i]
+      }
+    }
+  }
+  s["re"] = newre
+  s["im"] = newim
+  return s
+}
+
+# best denominator <= max_den of the continued-fraction expansion of x
+fn _best_denominator(x, max_den) {
+  let h1 = 1; let h0 = 0
+  let k1 = 0; let k0 = 1
+  let v = x
+  let best = 1
+  for step in range(24) {
+    let a = floor(v)
+    let h2 = a * h1 + h0
+    let k2 = a * k1 + k0
+    if k2 > max_den { break }
+    best = k2
+    h0 = h1; h1 = h2; k0 = k1; k1 = k2
+    let frac = v - a
+    if frac < 0.0000001 { break }
+    v = 1.0 / frac
+  }
+  return best
+}
+
+# Factor N (odd, not a prime power, N <= 21 keeps it under 16 qubits) using base a.
+# Runs the real circuit: Hadamards, controlled modular multiplications, inverse QFT.
+fn shor(modulus, a) {
+  if gcd(a, modulus) != 1 { return {"factors": [gcd(a, modulus), modulus / gcd(a, modulus)], "period": nil, "note": "lucky: a shares a factor with N"} }
+  let work_bits = _bit_length(modulus)
+  let t = 2 * work_bits
+  let n = t + work_bits
+  if n > 16 { _err("N is too large for the simulator (needs " + str(n) + " qubits)") }
+  let s = q.zero(n)
+  q.x(s, n - 1)                                  # work register = |1>
+  for j in range(t) { q.h(s, j) }
+  for j in range(t) {
+    let power = _modpow(a, 2 ** (t - 1 - j), modulus)
+    _controlled_mulmod(s, j, work_bits, power, modulus)
+  }
+  iqft(s, 0, t)
+  # marginal distribution of the counting register
+  let probs = q.probabilities(s)
+  let wsize = 2 ** work_bits
+  let dist = []
+  for y in range(2 ** t) {
+    let p = 0.0
+    for w in range(wsize) { p = p + probs[y * wsize + w] }
+    dist.push(p)
+  }
+  # read the period off the strongest peaks
+  let order = nil
+  let tried = []
+  let ranked = []
+  for y in range(1, len(dist)) { ranked.push([dist[y], y]) }
+  ranked = sorted(ranked)
+  ranked = reversed(ranked)
+  for cand in ranked[0:12] {
+    let denom = _best_denominator(cand[1] / (2 ** t), modulus)
+    tried.push(denom)
+    let mult = denom
+    while mult < 4 * modulus and order == nil {          # the peak may reveal a divisor of the period
+      if _modpow(a, mult, modulus) == 1 { order = mult }
+      mult = mult + denom
+    }
+    if order != nil { break }
+  }
+  if order == nil { return {"factors": nil, "period": nil, "note": "no period found", "qubits": n} }
+  let factors = nil
+  if order % 2 == 0 {
+    let half = _modpow(a, order / 2, modulus)
+    if half != modulus - 1 {
+      let f1 = gcd(half - 1, modulus)
+      let f2 = gcd(half + 1, modulus)
+      if f1 > 1 and f1 < modulus { factors = [f1, modulus / f1] }
+      else if f2 > 1 and f2 < modulus { factors = [f2, modulus / f2] }
+    }
+  }
+  return {"factors": factors, "period": order, "qubits": n, "counting_qubits": t,
+          "peaks": [[cand[1], cand[0]] for cand in ranked[0:6]]}
+}

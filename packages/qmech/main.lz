@@ -1,0 +1,170 @@
+# qmech - textbook quantum mechanics: the numbers behind the physics, in SI units.
+#
+#   import "qmech" as qm
+#   print(qm.hydrogen_energy_ev(1))                # -13.6057 eV  (the ground state)
+#   print(qm.hydrogen_wavelength_nm(3, 2))         # 656.11 nm    (H-alpha, the red Balmer line)
+#   print(qm.de_broglie_wavelength(9.109e-31, 5.9e6))
+#
+# Formulas (all from first principles + CODATA 2018 constants in physconst):
+#   Bohr model / Rydberg      E_n = -h c R_inf / n^2                       (infinite nuclear mass)
+#   photon                    E = h c / lambda,   p = h / lambda
+#   de Broglie                lambda = h / p
+#   Heisenberg                sigma_x sigma_p >= hbar / 2
+#   particle in a box         E_n = n^2 h^2 / (8 m L^2)
+#   harmonic oscillator       E_n = hbar omega (n + 1/2)
+#   tunneling (rect. barrier) T = 1 / (1 + V0^2 sinh^2(kappa a) / (4 E (V0 - E)))     for E < V0
+# Each is validated against textbook reference values in tests/test_qmech.lz.
+
+import "physmath" as m
+import "physconst" as k
+
+fn _err(msg) { throw {"type": "LarzValueError", "message": "qmech: " + msg} }
+
+# ------------------------------------------------------------------ photons and waves
+
+fn photon_energy_j(wavelength_m) { return k.h * k.c / wavelength_m }
+fn photon_energy_ev(wavelength_m) { return photon_energy_j(wavelength_m) / k.eV }
+fn photon_wavelength_m(energy_j) { return k.h * k.c / energy_j }
+fn photon_momentum(wavelength_m) { return k.h / wavelength_m }
+fn photon_frequency(wavelength_m) { return k.c / wavelength_m }
+
+# lambda = h / p  (any particle, non-relativistic p = m v)
+fn de_broglie_wavelength(mass_kg, speed_ms) {
+  if mass_kg <= 0 or speed_ms <= 0 { _err("mass and speed must be positive") }
+  return k.h / (mass_kg * speed_ms)
+}
+
+# wavelength of a particle accelerated from rest through `volts` (non-relativistic; fine below ~10 kV for electrons)
+fn de_broglie_from_voltage(mass_kg, charge_c, volts) {
+  return k.h / m.sqrt_(2.0 * mass_kg * charge_c * volts)
+}
+
+# Relativistic momentum p = gamma m v. Use this above ~0.1c: at 100 kV an electron already moves at
+# 0.55c and the non-relativistic wavelength is ~5% too long.
+fn de_broglie_relativistic(mass_kg, speed_ms) {
+  let b = speed_ms / k.c
+  if mass_kg <= 0 or speed_ms <= 0 or b >= 1.0 { _err("need a positive mass and a speed below c") }
+  let g = 1.0 / m.sqrt_((1.0 - b) * (1.0 + b))
+  return k.h / (g * mass_kg * speed_ms)
+}
+
+# Electron-microscope formula: a particle accelerated through `volts`, relativistically exact.
+# p c = sqrt(KE (KE + 2 m c^2)),  lambda = h c / (p c)
+fn de_broglie_from_voltage_relativistic(mass_kg, charge_c, volts) {
+  let ke = charge_c * volts
+  return k.h * k.c / m.sqrt_(ke * (ke + 2.0 * mass_kg * k.c * k.c))
+}
+
+# minimum momentum uncertainty for a position uncertainty (Heisenberg): dp >= hbar / (2 dx)
+fn min_momentum_uncertainty(dx_m) { return k.hbar / (2.0 * dx_m) }
+fn min_velocity_uncertainty(mass_kg, dx_m) { return min_momentum_uncertainty(dx_m) / mass_kg }
+
+# ------------------------------------------------------------------ hydrogen
+#
+# Bohr-model levels, i.e. E_n = -h c R / n^2 with NO fine structure, Lamb shift or hyperfine
+# splitting (those move lines by ~1e-5 relative). R is the Rydberg constant for the actual
+# nucleus: R_M = R_inf / (1 + m_e / M). By default M = the proton mass (real hydrogen, which
+# is what spectrographs see); pass infinite_mass=true for the textbook "R_inf" values.
+
+fn rydberg_constant(infinite_mass=false, nucleus_mass_kg=nil) {
+  if infinite_mass { return k.Rinf }
+  let mass = nucleus_mass_kg == nil ? k.m_p : nucleus_mass_kg
+  return k.Rinf / (1.0 + k.m_e / mass)
+}
+
+# energy of level n in eV (negative = bound)
+fn hydrogen_energy_ev(n, infinite_mass=false) {
+  if n < 1 or n != floor(n) { _err("principal quantum number must be a whole number >= 1") }
+  return -(k.h * k.c * rydberg_constant(infinite_mass) / k.eV) / (n * n)
+}
+
+fn hydrogen_energy_j(n, infinite_mass=false) { return hydrogen_energy_ev(n, infinite_mass) * k.eV }
+
+# Bohr radius of level n: r_n = n^2 a0 (a0 for infinite nuclear mass)
+fn hydrogen_radius_m(n) { return n * n * k.a0 }
+
+# VACUUM wavelength (nm) of the photon emitted in n_upper -> n_lower. The familiar Balmer
+# values (656.28 nm for H-alpha) are AIR wavelengths; vacuum is ~0.28 nm longer.
+fn hydrogen_wavelength_nm(n_upper, n_lower, infinite_mass=false) {
+  if n_upper <= n_lower { _err("emission needs n_upper > n_lower") }
+  let inv = rydberg_constant(infinite_mass) * (1.0 / (n_lower * n_lower) - 1.0 / (n_upper * n_upper))
+  return 1000000000.0 / inv
+}
+
+fn hydrogen_series(n_lower) {
+  if n_lower == 1 { return "Lyman (ultraviolet)" }
+  if n_lower == 2 { return "Balmer (visible)" }
+  if n_lower == 3 { return "Paschen (infrared)" }
+  if n_lower == 4 { return "Brackett (infrared)" }
+  if n_lower == 5 { return "Pfund (infrared)" }
+  return "Humphreys and beyond (far infrared)"
+}
+
+# series limit: the shortest wavelength of the series (n_upper -> infinity), in nm
+fn hydrogen_series_limit_nm(n_lower, infinite_mass=false) {
+  return 1000000000.0 / (rydberg_constant(infinite_mass) / (n_lower * n_lower))
+}
+
+fn hydrogen_ionization_ev(n, infinite_mass=false) { return -hydrogen_energy_ev(n, infinite_mass) }
+
+# Convert a vacuum wavelength to the wavelength in standard air (Edlen 1966 dispersion formula).
+fn vacuum_to_air_nm(vacuum_nm) {
+  let sigma2 = 1000000.0 / (vacuum_nm * vacuum_nm)      # (1/lambda in micrometres)^2
+  let n = 1.0 + 0.0000834213 + 0.0240603 / (130.0 - sigma2) + 0.00015997 / (38.9 - sigma2)
+  return vacuum_nm / n
+}
+
+# ------------------------------------------------------------------ particle in a box
+
+# E_n = n^2 h^2 / (8 m L^2)   (1-D infinite well of width L)
+fn box_energy_j(n, mass_kg, length_m) {
+  if n < 1 or n != floor(n) { _err("n must be a whole number >= 1") }
+  return n * n * k.h * k.h / (8.0 * mass_kg * length_m * length_m)
+}
+fn box_energy_ev(n, mass_kg, length_m) { return box_energy_j(n, mass_kg, length_m) / k.eV }
+
+# probability density |psi_n(x)|^2 = (2/L) sin^2(n pi x / L)
+fn box_density(n, length_m, x_m) {
+  let v = m.sin(n * m.PI * x_m / length_m)
+  return 2.0 / length_m * v * v
+}
+
+# probability of finding the particle between x1 and x2 (exact integral of |psi|^2)
+fn box_probability(n, length_m, x1_m, x2_m) {
+  let a = n * m.PI / length_m
+  let prim = fn(x) { return x / 2.0 - m.sin(2.0 * a * x) / (4.0 * a) }
+  return 2.0 / length_m * (prim(x2_m) - prim(x1_m))
+}
+
+# ------------------------------------------------------------------ harmonic oscillator
+
+fn oscillator_energy_j(n, omega_rad_s) { return k.hbar * omega_rad_s * (n + 0.5) }
+fn oscillator_zero_point_j(omega_rad_s) { return 0.5 * k.hbar * omega_rad_s }
+
+# ------------------------------------------------------------------ tunneling
+
+# Transmission probability through a rectangular barrier of height V0 (J) and width a (m)
+# for a particle of energy E (J) and mass mass_kg. Above the barrier (E > V0) the oscillatory formula applies.
+fn tunneling_probability(energy_j, barrier_j, width_m, mass_kg) {
+  if energy_j <= 0 or barrier_j <= 0 { _err("energies must be positive") }
+  if energy_j == barrier_j { return 1.0 / (1.0 + mass_kg * barrier_j * width_m * width_m / (2.0 * k.hbar * k.hbar)) }
+  if energy_j < barrier_j {
+    let kappa = m.sqrt_(2.0 * mass_kg * (barrier_j - energy_j)) / k.hbar
+    # For kappa*a > 300, sinh overflows long before T stops being meaningful: use the exact
+    # asymptotic form T = 16 E (V0 - E) / V0^2 * exp(-2 kappa a)  (relative error < e^-600).
+    if kappa * width_m > 300.0 { return 16.0 * energy_j * (barrier_j - energy_j) / (barrier_j * barrier_j) * m.exp(-2.0 * kappa * width_m) }
+    let s = m.sinh(kappa * width_m)
+    return 1.0 / (1.0 + barrier_j * barrier_j * s * s / (4.0 * energy_j * (barrier_j - energy_j)))
+  }
+  let kk = m.sqrt_(2.0 * mass_kg * (energy_j - barrier_j)) / k.hbar
+  let s2 = m.sin(kk * width_m)
+  return 1.0 / (1.0 + barrier_j * barrier_j * s2 * s2 / (4.0 * energy_j * (energy_j - barrier_j)))
+}
+
+# the decay constant kappa (1/m) inside the barrier
+fn tunneling_kappa(energy_j, barrier_j, mass_kg) { return m.sqrt_(2.0 * mass_kg * (barrier_j - energy_j)) / k.hbar }
+
+# ------------------------------------------------------------------ spin and magnetic resonance
+
+# Larmor / Zeeman: photon frequency of the electron-spin flip in field B tesla (g = 2.00231930436)
+fn electron_spin_flip_frequency_hz(b_tesla) { return 2.00231930436 * 9.2740100783 * 0.0000000000000000000000001 * b_tesla / k.h }

@@ -1,0 +1,57 @@
+import "harness" as t
+import "complex" as cx
+import "physmath" as m
+import "data_complex" as ref
+
+fn near(a, b, tol) {       # relative to the larger of |b| and 1 (complex values are O(1..100))
+  let scale = cx.abs(b)
+  if scale < 1.0 { scale = 1.0 }
+  return cx.abs(cx.sub(a, b)) <= tol * scale
+}
+
+t.suite("complex: arithmetic against Python cmath")
+let bad_add = 0; let bad_mul = 0; let bad_div = 0; let bad_exp = 0; let bad_sqrt = 0; let bad_ln = 0; let bad_pow = 0
+for row in ref.CASES {
+  let a = row[0]; let b = row[1]
+  if not near(cx.add(a, b), row[2], 0.000000000000005) { bad_add = bad_add + 1 }
+  if not near(cx.sub(a, b), row[3], 0.000000000000005) { bad_add = bad_add + 1 }
+  if not near(cx.mul(a, b), row[4], 0.000000000000005) { bad_mul = bad_mul + 1 }
+  if not near(cx.div(a, b), row[5], 0.00000000000001) { bad_div = bad_div + 1 }
+  if not near(cx.exp(row[7]), row[6], 0.00000000000001) { bad_exp = bad_exp + 1 }
+  if not near(cx.sqrt(a), row[8], 0.00000000000001) { bad_sqrt = bad_sqrt + 1 }
+  if not near(cx.ln(a), row[9], 0.00000000000001) { bad_ln = bad_ln + 1 }
+  if not near(cx.powi(a, row[11]), row[10], 0.00000000000005) { bad_pow = bad_pow + 1 }
+}
+t.equal(bad_add, 0, "add/sub match cmath on all " + str(len(ref.CASES)) + " cases")
+t.equal(bad_mul, 0, "mul matches")
+t.equal(bad_div, 0, "div matches")
+t.equal(bad_exp, 0, "exp matches")
+t.equal(bad_sqrt, 0, "sqrt matches")
+t.equal(bad_ln, 0, "ln matches")
+t.equal(bad_pow, 0, "powi matches")
+let bad_abs = 0
+for r in ref.ABS_ARG {
+  if abs(cx.abs(r[0]) - r[1]) > 0.000000000000005 * r[1] { bad_abs = bad_abs + 1 }
+  if abs(cx.arg(r[0]) - r[2]) > 0.000000000000005 { bad_abs = bad_abs + 1 }
+}
+t.equal(bad_abs, 0, "abs and arg match")
+
+t.suite("complex: identities")
+t.close(cx.abs(cx.c(3, 4)), 5.0, 0.000000000000001, "|3+4i| = 5")
+t.check(cx.close(cx.exp(cx.c(0, m.PI)), cx.c(-1, 0), 0.000000000000002), "Euler: e^(i pi) = -1")
+t.check(cx.close(cx.mul(cx.I, cx.I), cx.c(-1, 0), 0.0), "i * i = -1")
+t.check(cx.close(cx.sqrt(cx.c(-4, 0)), cx.c(0, 2), 0.000000000000002), "sqrt(-4) = 2i")
+t.check(cx.close(cx.conj(cx.c(2, -5)), cx.c(2, 5), 0.0), "conj")
+t.check(cx.close(cx.mul(cx.c(2, 3), cx.inv(cx.c(2, 3))), cx.ONE, 0.000000000000002), "z * (1/z) = 1")
+t.close(cx.abs2(cx.c(3, 4)), 25.0, 0.000000000000001, "abs2 = 25")
+t.check(cx.close(cx.from_polar(2, m.PI / 2), cx.c(0, 2), 0.000000000000003), "from_polar(2, pi/2) = 2i")
+let s = 0.0
+for k from 0 to 7 { s = s + cx.root_of_unity(k, 8)[0] }
+t.close(s, 0.0, 0.000000000000005, "the eight 8th roots of unity sum to 0 (real part)")
+t.check(cx.close(cx.powi(cx.root_of_unity(1, 12), 12), cx.ONE, 0.00000000000001), "(12th root of unity)^12 = 1")
+t.equal(cx.str(cx.c(0.5, -0.25), 2), "0.50-0.25i", "str formats")
+t.equal(cx.str(cx.c(1, 0), 3), "1.000+0.000i", "str with zero imaginary part")
+t.equal(cx.str(cx.c(-1, -0.0000001), 3), "-1.000+0.000i", "str never prints -0.000i")
+t.raises(fn() { cx.div(cx.ONE, cx.ZERO) }, "division by zero throws")
+t.raises(fn() { cx.ln(cx.ZERO) }, "ln(0) throws")
+t.finish()

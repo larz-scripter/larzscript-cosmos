@@ -1,0 +1,10 @@
+# Electron wavelength in a transmission electron microscope: relativity matters.
+import "qmech" as qm
+import "physconst" as k
+import "physmath" as m
+
+for kv in [100000.0, 200000.0, 300000.0] {
+  let rel = qm.de_broglie_from_voltage_relativistic(k.m_e, k.e, kv)
+  let simple = qm.de_broglie_from_voltage(k.m_e, k.e, kv)
+  print(m.fixed(kv / 1000.0, 0) + " kV: " + m.fixed(rel * 1000000000000.0, 4) + " pm   (the non-relativistic formula gives " + m.fixed(simple * 1000000000000.0, 4) + " pm, " + m.fixed((simple / rel - 1.0) * 100.0, 2) + "% too long)")
+}

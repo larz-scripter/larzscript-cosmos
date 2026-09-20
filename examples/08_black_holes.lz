@@ -1,0 +1,8 @@
+# Properties of black holes of very different masses.
+import "relativity" as rel
+import "physconst" as k
+import "physmath" as m
+
+for row in [["Earth", k.M_earth], ["the Sun", k.M_sun], ["Sagittarius A*", 4300000.0 * k.M_sun]] {
+  print(row[0] + ": r_s = " + m.sig(rel.schwarzschild_radius(row[1]), 5) + " m, Hawking T = " + m.sig(rel.hawking_temperature(row[1]), 4) + " K, lifetime = " + m.sig(rel.hawking_lifetime_s(row[1]) / k.year, 3) + " years")
+}

@@ -1,0 +1,108 @@
+import "harness" as t
+import "qalgo" as qa
+import "quantum" as q
+import "complex" as cx
+import "physmath" as m
+
+t.suite("qalgo: QFT equals the discrete Fourier transform")
+fn dft_check(n, ops) {
+  let s = q.run(n, ops)
+  let size = 2 ** n
+  let want = []
+  for y in range(size) {
+    let acc = cx.ZERO
+    for x in range(size) {
+      let a = [s["re"][x], s["im"][x]]
+      acc = cx.add(acc, cx.mul(a, cx.from_polar(1.0, m.TAU * x * y / size)))
+    }
+    want.push(cx.scale(acc, 1.0 / sqrt(size)))
+  }
+  qa.qft(s, 0, n)
+  let worst = 0.0
+  for y in range(size) { let e = abs(s["re"][y] - want[y][0]) + abs(s["im"][y] - want[y][1]); if e > worst { worst = e } }
+  return worst
+}
+t.check(dft_check(3, [["h", 0], ["ry", 1, 0.7], ["cnot", 0, 2], ["t", 2], ["rx", 1, 1.9]]) < 0.000000000001, "3-qubit QFT = DFT on an entangled input")
+t.check(dft_check(5, [["h", 0], ["ry", 1, 1.1], ["cnot", 0, 3], ["rz", 2, 0.4], ["h", 4], ["cz", 4, 1], ["rx", 3, 2.2]]) < 0.000000000001, "5-qubit QFT = DFT on an entangled input")
+let rt = q.run(4, [["h", 0], ["ry", 2, 0.9], ["cnot", 0, 3], ["rz", 1, 0.3], ["h", 1]])
+let orig = q.copy(rt)
+qa.qft(rt, 0, 4); qa.iqft(rt, 0, 4)
+t.close(q.fidelity(rt, orig), 1.0, 0.000000000001, "iqft(qft(psi)) = psi")
+let sub = q.run(5, [["x", 3], ["x", 4]])          # QFT on a 2-qubit sub-register: |11> -> uniform with phases
+qa.qft(sub, 3, 2)
+t.close(q.prob(sub, 3), 0.5, 0.000000000001, "QFT on a sub-register leaves other qubits alone and spreads this one")
+
+t.suite("qalgo: Grover matches sin^2((2k+1) theta)")
+t.equal(qa.optimal_iterations(4, 1), 1, "4 items: 1 iteration")
+t.equal(qa.optimal_iterations(16, 1), 3, "16 items: 3 iterations")
+t.equal(qa.optimal_iterations(256, 1), 12, "256 items: 12 iterations")
+let g4 = qa.grover(2, [2])
+t.close(g4["p_marked"], 1.0, 0.000000000001, "2 qubits: one iteration finds the item with certainty")
+for spec in [[3, [5], 1], [3, [5], 2], [4, [11], 1], [4, [11], 3], [4, [11], 5], [4, [1, 6, 9], 2], [5, [0], 4], [6, [40, 41], 5]] {
+  let r = qa.grover(spec[0], spec[1], spec[2])
+  t.close(r["p_marked"], qa.grover_theory(2 ** spec[0], len(spec[1]), spec[2]), 0.0000000000001, "n=" + str(spec[0]) + " M=" + str(len(spec[1])) + " k=" + str(spec[2]) + " matches theory")
+}
+let g8 = qa.grover(8, [200])
+t.check(g8["p_marked"] > 0.9999, "256 items, optimal iterations: P = " + m.fixed(g8["p_marked"], 6))
+t.close(q.norm(g8["state"]), 1.0, 0.00000000001, "Grover keeps the state normalised")
+let over = qa.grover(4, [11], 6)
+t.check(over["p_marked"] < qa.grover(4, [11], 3)["p_marked"], "too many iterations overshoots (amplitude rotates past the target)")
+
+t.suite("qalgo: Deutsch-Jozsa and Bernstein-Vazirani")
+t.equal(qa.deutsch_jozsa(4, fn(x) { return 0 })["verdict"], "constant", "f = 0 is constant")
+t.equal(qa.deutsch_jozsa(4, fn(x) { return 1 })["verdict"], "constant", "f = 1 is constant")
+t.equal(qa.deutsch_jozsa(4, fn(x) { return x % 2 })["verdict"], "balanced", "f = parity of the last bit is balanced")
+t.equal(qa.deutsch_jozsa(4, fn(x) { return x >= 8 ? 1 : 0 })["verdict"], "balanced", "f = first bit is balanced")
+t.equal(qa.deutsch_jozsa(3, fn(x) { return x == 5 ? 1 : 0 })["verdict"], "promise violated", "a function that is neither constant nor balanced is flagged")
+t.close(qa.deutsch_jozsa(5, fn(x) { return 0 })["p_all_zero"], 1.0, 0.000000000001, "constant -> all-zero with probability 1")
+let all_ok = true
+for k in range(16) {
+  let secret = q.bits(k, 4)
+  let r = qa.bernstein_vazirani(secret)
+  if r["found"] != secret or r["probability"] < 0.999999 { all_ok = false }
+}
+t.check(all_ok, "Bernstein-Vazirani recovers all sixteen 4-bit secrets in one query")
+
+t.suite("qalgo: teleportation")
+let worst_f = 1.0
+for ang in [[0.0, 0.0], [3.141592653589793, 0.0], [0.9, 2.1], [2.4, -1.3], [1.5707963267948966, 4.0], [0.3, 5.5]] {
+  for outcome in [[0, 0], [0, 1], [1, 0], [1, 1]] {
+    let r = qa.teleport(ang[0], ang[1], outcome)
+    if r["fidelity"] < worst_f { worst_f = r["fidelity"] }
+  }
+}
+t.close(worst_f, 1.0, 0.000000000001, "fidelity 1 for 6 states x all 4 measurement outcomes")
+q.seed(77)
+let live = qa.teleport(1.234, 0.567)
+t.close(live["fidelity"], 1.0, 0.000000000001, "fidelity 1 with a real random measurement (outcome " + str(live["m0"]) + str(live["m1"]) + ")")
+
+t.suite("qalgo: quantum phase estimation")
+for spec in [[3, 0.125], [3, 0.375], [4, 0.0625], [5, 0.71875], [6, 0.5]] {
+  let pe = qa.phase_estimation(spec[0], spec[1])
+  t.close(pe["estimate"], spec[1], 0.0, "t=" + str(spec[0]) + " reads " + str(spec[1]) + " exactly")
+  t.close(pe["probability"], 1.0, 0.000000000001, "  ... with probability 1")
+}
+let pe2 = qa.phase_estimation(6, 0.3)
+t.equal(pe2["best"], 19, "phi = 0.3 with 6 counting qubits: most likely outcome is round(0.3 * 64) = 19")
+t.check(pe2["probability"] > 4.0 / (m.PI * m.PI), "success probability exceeds the textbook bound 4/pi^2 (" + m.fixed(pe2["probability"], 4) + ")")
+
+t.suite("qalgo: CHSH Bell inequality")
+t.close(qa.chsh(), 2.0 * sqrt(2), 0.00000000000001, "quantum S = 2 sqrt 2")
+t.equal(qa.chsh_classical_max(), 2, "no classical strategy beats S = 2")
+let bell = q.zero(2)
+q.h(bell, 0); q.cnot(bell, 0, 1)
+t.close(qa.chsh_correlation(bell, 0.3, 1.1), m.cos(0.3 - 1.1), 0.00000000000001, "E(a, b) = cos(a - b)")
+t.close(qa.chsh_correlation(bell, 2.0, 2.0), 1.0, 0.00000000000001, "same direction -> perfect correlation")
+t.check(abs(qa.chsh(0.0, 0.0, 0.0, 0.0)) <= 2.0000000001, "if both sides ignore the choice, no violation")
+
+t.suite("qalgo: Shor's algorithm (real circuit on 12 qubits)")
+for spec in [[15, 2, 4], [15, 7, 4], [15, 8, 4], [15, 13, 4], [15, 4, 2], [15, 11, 2]] {
+  let r = qa.shor(spec[0], spec[1])
+  t.equal(r["period"], spec[2], "order of " + str(spec[1]) + " mod " + str(spec[0]) + " is " + str(spec[2]))
+}
+let f15 = qa.shor(15, 7)
+t.check(f15["factors"] != nil and f15["factors"][0] * f15["factors"][1] == 15 and f15["factors"][0] > 1, "15 = " + str(f15["factors"]))
+t.equal(qa.shor(15, 14)["factors"], nil, "a = 14 = -1 mod 15 has an even order but yields no factors (Shor's known failure case)")
+t.equal(qa.shor(15, 3)["factors"][0] * qa.shor(15, 3)["factors"][1], 15, "a sharing a factor with N is handled")
+t.raises(fn() { qa.shor(35, 2) }, "N too large for the simulator is refused")
+t.finish()

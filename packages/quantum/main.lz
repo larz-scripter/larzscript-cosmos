@@ -1,0 +1,532 @@
+# quantum - a real quantum-circuit simulator in pure Larzscript.
+#
+# A state is a dict {"n": qubits, "re": [...], "im": [...]} holding the 2^n complex
+# amplitudes as two parallel lists (fast: gates touch only the amplitude pairs they
+# change). Gates mutate the state in place and return it, so calls chain naturally.
+#
+#   import "quantum" as q
+#   let s = q.zero(2)                 # |00>
+#   q.h(s, 0); q.cnot(s, 0, 1)        # Bell state (|00> + |11>) / sqrt 2
+#   print(q.state_str(s, 4))          # 0.7071|00> + 0.7071|11>
+#   print(q.sample(s, 1000))          # {"00": ~500, "11": ~500}
+#
+# CONVENTION: qubit 0 is the LEFTMOST bit, as in textbooks - |q0 q1 q2>. Basis index i
+# has qubit k at bit (n-1-k) of i, so "011" is index 3 with q0=0, q1=1, q2=1.
+# Measurement is seedable: q.seed(42) makes every run reproducible.
+#
+# Practical size: ~30 ms per gate at 12 qubits, ~120 ms at 14 (native interpreter).
+# Cross-checked against an independent brute-force implementation in
+# tools/gen_ref_quantum.py (full Kronecker-product matrices) - see tests/.
+
+import "physmath" as m
+
+let INV_SQRT2 = 0.7071067811865476
+let MAX_QUBITS = 20
+
+fn _err(msg) { throw {"type": "LarzValueError", "message": "quantum: " + msg} }
+
+# ------------------------------------------------------------------ states
+
+fn zero(n) {
+  if n < 1 or n > MAX_QUBITS or n != floor(n) { _err("qubit count must be a whole number from 1 to " + str(MAX_QUBITS)) }
+  let size = 2 ** n
+  let re = [0.0] * size
+  let im = [0.0] * size
+  re[0] = 1.0
+  return {"n": n, "re": re, "im": im}
+}
+
+# |i> for a whole number i, or for a bit string like "101"
+fn basis(n, which) {
+  let s = zero(n)
+  let idx = type(which) == "string" ? from_bits(which) : which
+  if idx < 0 or idx >= 2 ** n { _err("basis state out of range") }
+  s["re"][0] = 0.0
+  s["re"][idx] = 1.0
+  return s
+}
+
+fn copy(s) { return {"n": s["n"], "re": s["re"] + [], "im": s["im"] + []} }
+
+fn _check_qubit(s, k) {
+  if k < 0 or k >= s["n"] or k != floor(k) { _err("qubit " + str(k) + " does not exist in a " + str(s["n"]) + "-qubit state") }
+}
+
+fn _stride(s, k) { return 2 ** (s["n"] - 1 - k) }
+
+# ------------------------------------------------------------------ bit strings
+
+# index -> "011" (qubit 0 first)
+fn bits(i, n) {
+  let out = ""
+  let v = i
+  for j from 1 to n {
+    out = str(v % 2) + out
+    v = floor(v / 2)
+  }
+  return out
+}
+
+fn from_bits(text) {
+  let v = 0
+  for ch in text {
+    if ch != "0" and ch != "1" { _err("bit strings contain only 0 and 1") }
+    v = v * 2 + (ch == "1" ? 1 : 0)
+  }
+  return v
+}
+
+# ------------------------------------------------------------------ gates: general single-qubit
+
+# Apply the 2x2 matrix [[a, b], [c, d]] (each entry re, im) to qubit k.
+fn apply1(s, k, ar, ai, br, bi, cr, ci, dr, di) {
+  _check_qubit(s, k)
+  let re = s["re"]
+  let im = s["im"]
+  let size = len(re)
+  let stride = _stride(s, k)
+  for base in range(0, size, 2 * stride) {
+    for off in range(stride) {
+      let i = base + off
+      let j = i + stride
+      let xr = re[i]; let xi = im[i]; let yr = re[j]; let yi = im[j]
+      re[i] = ar * xr - ai * xi + br * yr - bi * yi
+      im[i] = ar * xi + ai * xr + br * yi + bi * yr
+      re[j] = cr * xr - ci * xi + dr * yr - di * yi
+      im[j] = cr * xi + ci * xr + dr * yi + di * yr
+    }
+  }
+  return s
+}
+
+# controlled version: applies the 2x2 to `target` only where every control qubit is 1
+fn apply_controlled(s, controls, target, ar, ai, br, bi, cr, ci, dr, di) {
+  _check_qubit(s, target)
+  let strides = []
+  for c in controls {
+    _check_qubit(s, c)
+    if c == target { _err("a control cannot be the target") }
+    strides.push(_stride(s, c))
+  }
+  let re = s["re"]
+  let im = s["im"]
+  let size = len(re)
+  let stride = _stride(s, target)
+  for base in range(0, size, 2 * stride) {
+    for off in range(stride) {
+      let i = base + off
+      let on = true
+      for cs in strides { if floor(i / cs) % 2 == 0 { on = false } }
+      if on {
+        let j = i + stride
+        let xr = re[i]; let xi = im[i]; let yr = re[j]; let yi = im[j]
+        re[i] = ar * xr - ai * xi + br * yr - bi * yi
+        im[i] = ar * xi + ai * xr + br * yi + bi * yr
+        re[j] = cr * xr - ci * xi + dr * yr - di * yi
+        im[j] = cr * xi + ci * xr + dr * yi + di * yr
+      }
+    }
+  }
+  return s
+}
+
+# ------------------------------------------------------------------ named single-qubit gates
+
+fn h(s, k) { return apply1(s, k, INV_SQRT2, 0.0, INV_SQRT2, 0.0, INV_SQRT2, 0.0, -INV_SQRT2, 0.0) }
+
+# X, Z and the phase gates are done without a general matrix multiply.
+fn x(s, k) {
+  _check_qubit(s, k)
+  let re = s["re"]; let im = s["im"]
+  let stride = _stride(s, k)
+  for base in range(0, len(re), 2 * stride) {
+    for off in range(stride) {
+      let i = base + off
+      let j = i + stride
+      let tr = re[i]; let ti = im[i]
+      re[i] = re[j]; im[i] = im[j]
+      re[j] = tr; im[j] = ti
+    }
+  }
+  return s
+}
+
+fn y(s, k) { return apply1(s, k, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0) }
+
+# multiply every amplitude whose qubit k is 1 by e^(i phi)
+fn phase(s, k, phi) {
+  _check_qubit(s, k)
+  let re = s["re"]; let im = s["im"]
+  let stride = _stride(s, k)
+  let cr = m.cos(phi)
+  let ci = m.sin(phi)
+  for base in range(0, len(re), 2 * stride) {
+    for off in range(stride) {
+      let j = base + off + stride
+      let tr = re[j]
+      re[j] = cr * tr - ci * im[j]
+      im[j] = cr * im[j] + ci * tr
+    }
+  }
+  return s
+}
+
+fn z(s, k) { return phase(s, k, m.PI) }
+fn s_gate(s, k) { return phase(s, k, m.HALF_PI) }
+fn sdg(s, k) { return phase(s, k, -m.HALF_PI) }
+fn t_gate(s, k) { return phase(s, k, m.PI / 4.0) }
+fn tdg(s, k) { return phase(s, k, -m.PI / 4.0) }
+
+# rotations: R_axis(theta) = exp(-i theta axis / 2)
+fn rx(s, k, theta) {
+  let c = m.cos(theta / 2.0); let sn = m.sin(theta / 2.0)
+  return apply1(s, k, c, 0.0, 0.0, -sn, 0.0, -sn, c, 0.0)
+}
+fn ry(s, k, theta) {
+  let c = m.cos(theta / 2.0); let sn = m.sin(theta / 2.0)
+  return apply1(s, k, c, 0.0, -sn, 0.0, sn, 0.0, c, 0.0)
+}
+fn rz(s, k, theta) {
+  let c = m.cos(theta / 2.0); let sn = m.sin(theta / 2.0)
+  return apply1(s, k, c, -sn, 0.0, 0.0, 0.0, 0.0, c, sn)
+}
+
+# ------------------------------------------------------------------ multi-qubit gates
+
+fn cnot(s, control, target) { return apply_controlled(s, [control], target, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0) }
+fn cz(s, a, b) { return cphase(s, a, b, m.PI) }
+fn ccx(s, c1, c2, target) { return apply_controlled(s, [c1, c2], target, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0) }
+
+# controlled phase: multiply amplitudes where BOTH qubits are 1 by e^(i phi)
+fn cphase(s, a, b, phi) {
+  _check_qubit(s, a)
+  _check_qubit(s, b)
+  if a == b { _err("cphase needs two different qubits") }
+  let re = s["re"]; let im = s["im"]
+  let sa = _stride(s, a)
+  let sb = _stride(s, b)
+  let cr = m.cos(phi)
+  let ci = m.sin(phi)
+  for i in range(len(re)) {
+    if floor(i / sa) % 2 == 1 and floor(i / sb) % 2 == 1 {
+      let tr = re[i]
+      re[i] = cr * tr - ci * im[i]
+      im[i] = cr * im[i] + ci * tr
+    }
+  }
+  return s
+}
+
+fn swap(s, a, b) {
+  cnot(s, a, b)
+  cnot(s, b, a)
+  return cnot(s, a, b)
+}
+
+# ------------------------------------------------------------------ inspection
+
+fn norm(s) {
+  let total = 0.0
+  for i in range(len(s["re"])) { total = total + s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i] }
+  return total
+}
+
+fn normalize(s) {
+  let nn = m.sqrt_(norm(s))
+  if nn == 0 { _err("cannot normalize the zero state") }
+  for i in range(len(s["re"])) { s["re"][i] = s["re"][i] / nn; s["im"][i] = s["im"][i] / nn }
+  return s
+}
+
+fn amplitude(s, which) {
+  let idx = type(which) == "string" ? from_bits(which) : which
+  return [s["re"][idx], s["im"][idx]]
+}
+
+fn probabilities(s) {
+  let out = []
+  for i in range(len(s["re"])) { out.push(s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i]) }
+  return out
+}
+
+# P(qubit k reads 1)
+fn prob(s, k) {
+  _check_qubit(s, k)
+  let stride = _stride(s, k)
+  let total = 0.0
+  for i in range(len(s["re"])) {
+    if floor(i / stride) % 2 == 1 { total = total + s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i] }
+  }
+  return total
+}
+
+# <a|b>  as [re, im]
+fn inner(a, b) {
+  let rr = 0.0
+  let ii = 0.0
+  for i in range(len(a["re"])) {
+    rr = rr + a["re"][i] * b["re"][i] + a["im"][i] * b["im"][i]
+    ii = ii + a["re"][i] * b["im"][i] - a["im"][i] * b["re"][i]
+  }
+  return [rr, ii]
+}
+
+# |<a|b>|^2 - 1 for identical states (up to a global phase), 0 for orthogonal ones
+fn fidelity(a, b) {
+  let ip = inner(a, b)
+  return ip[0] * ip[0] + ip[1] * ip[1]
+}
+
+# <Z> on qubit k: +1 for |0>, -1 for |1>
+fn expect_z(s, k) { return 1.0 - 2.0 * prob(s, k) }
+
+# Expectation of a Pauli string such as "ZZI" or "XIX" (one letter per qubit, I = identity).
+fn expect_pauli(s, text) {
+  if len(text) != s["n"] { _err("Pauli string needs one letter per qubit") }
+  let work = copy(s)
+  for k in range(s["n"]) {
+    let p = text[k]
+    if p == "X" { h(work, k) }
+    else if p == "Y" { sdg(work, k); h(work, k) }
+    else if p != "Z" and p != "I" { _err("Pauli letters are I, X, Y, Z") }
+  }
+  let total = 0.0
+  for i in range(len(work["re"])) {
+    let sign = 1.0
+    for k in range(s["n"]) {
+      if text[k] != "I" and floor(i / _stride(s, k)) % 2 == 1 { sign = -sign }
+    }
+    total = total + sign * (work["re"][i] * work["re"][i] + work["im"][i] * work["im"][i])
+  }
+  return total
+}
+
+# Reduced density matrix of one qubit: [[a, b], [c, d]] as re/im pieces.
+# Returns {"r00","r11","r01re","r01im"} (rho is Hermitian, trace 1).
+fn _reduced(s, k) {
+  _check_qubit(s, k)
+  let stride = _stride(s, k)
+  let r00 = 0.0; let r11 = 0.0; let cr = 0.0; let ci = 0.0
+  for base in range(0, len(s["re"]), 2 * stride) {
+    for off in range(stride) {
+      let i = base + off
+      let j = i + stride
+      r00 = r00 + s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i]
+      r11 = r11 + s["re"][j] * s["re"][j] + s["im"][j] * s["im"][j]
+      # rho01 = sum psi_i * conj(psi_j)
+      cr = cr + s["re"][i] * s["re"][j] + s["im"][i] * s["im"][j]
+      ci = ci + s["im"][i] * s["re"][j] - s["re"][i] * s["im"][j]
+    }
+  }
+  return {"r00": r00, "r11": r11, "r01re": cr, "r01im": ci}
+}
+
+# Bloch vector [x, y, z] of one qubit. Length 1 = pure (unentangled), < 1 = entangled with the rest.
+fn bloch(s, k) {
+  let r = _reduced(s, k)
+  return [2.0 * r["r01re"], -2.0 * r["r01im"], r["r00"] - r["r11"]]
+}
+
+# Entanglement entropy (bits) between qubit k and the other qubits.
+fn entropy(s, k) {
+  let b = bloch(s, k)
+  let len_ = m.sqrt_(b[0] * b[0] + b[1] * b[1] + b[2] * b[2])
+  if len_ > 1.0 { len_ = 1.0 }
+  let l1 = (1.0 + len_) / 2.0
+  let l2 = (1.0 - len_) / 2.0
+  let total = 0.0
+  if l1 > 0.000000000000001 { total = total - l1 * m.log2(l1) }
+  if l2 > 0.000000000000001 { total = total - l2 * m.log2(l2) }
+  return total
+}
+
+# Pretty-print amplitudes, e.g. "0.7071|00> + 0.7071|11>". Amplitudes below `cutoff` are hidden.
+fn state_str(s, digits, cutoff=0.000001) {
+  let parts = []
+  for i in range(len(s["re"])) {
+    let a2 = s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i]
+    if a2 > cutoff * cutoff {
+      let re = s["re"][i]
+      let imv = s["im"][i]
+      let label = "|" + bits(i, s["n"]) + ">"
+      if abs(imv) < cutoff { parts.push(m.fixed(re, digits) + label) }
+      else if abs(re) < cutoff { parts.push(m.fixed(imv, digits) + "i" + label) }
+      else { parts.push("(" + m.fixed(re, digits) + (imv < 0 ? "-" : "+") + m.fixed(abs(imv), digits) + "i)" + label) }
+    }
+  }
+  if len(parts) == 0 { return "0" }
+  return join(parts, " + ").replace("+ -", "- ")
+}
+
+# ------------------------------------------------------------------ measurement (seedable)
+
+let _rng = 123456789
+
+fn seed(n) {
+  _rng = int(abs(n)) % 2147483646 + 1
+}
+
+fn _rand() {
+  _rng = (_rng * 16807) % 2147483647
+  return _rng / 2147483647.0
+}
+
+# Measure qubit k: collapses the state, returns 0 or 1.
+fn measure(s, k) {
+  let p1 = prob(s, k)
+  let outcome = _rand() < p1 ? 1 : 0
+  let keep = outcome == 1 ? p1 : 1.0 - p1
+  let stride = _stride(s, k)
+  let scale = 1.0 / m.sqrt_(keep)
+  for i in range(len(s["re"])) {
+    if floor(i / stride) % 2 == outcome { s["re"][i] = s["re"][i] * scale; s["im"][i] = s["im"][i] * scale }
+    else { s["re"][i] = 0.0; s["im"][i] = 0.0 }
+  }
+  return outcome
+}
+
+# Post-select: force qubit k to read `outcome` (0 or 1) and renormalise. Returns the probability
+# that outcome had (so callers can tell a likely branch from a rare one). Errors if it is impossible.
+fn project(s, k, outcome) {
+  let p1 = prob(s, k)
+  let keep = outcome == 1 ? p1 : 1.0 - p1
+  if keep < 0.000000000000001 { _err("that measurement outcome has probability 0") }
+  let stride = _stride(s, k)
+  let scale = 1.0 / m.sqrt_(keep)
+  for i in range(len(s["re"])) {
+    if floor(i / stride) % 2 == outcome { s["re"][i] = s["re"][i] * scale; s["im"][i] = s["im"][i] * scale }
+    else { s["re"][i] = 0.0; s["im"][i] = 0.0 }
+  }
+  return keep
+}
+
+# Measure every qubit: collapses to a basis state, returns its bit string.
+fn measure_all(s) {
+  let r = _rand()
+  let cum = 0.0
+  let pick = len(s["re"]) - 1
+  for i in range(len(s["re"])) {
+    cum = cum + s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i]
+    if r < cum { pick = i; break }
+  }
+  for i in range(len(s["re"])) { s["re"][i] = 0.0; s["im"][i] = 0.0 }
+  s["re"][pick] = 1.0
+  return bits(pick, s["n"])
+}
+
+# `shots` independent measurements of all qubits WITHOUT collapsing the state.
+# Returns {"010": count, ...}. Uses binary search over the cumulative distribution.
+fn sample(s, shots) {
+  let size = len(s["re"])
+  let cum = []
+  let total = 0.0
+  for i in range(size) {
+    total = total + s["re"][i] * s["re"][i] + s["im"][i] * s["im"][i]
+    cum.push(total)
+  }
+  let counts = {}
+  for shot in range(shots) {
+    let r = _rand() * total
+    let lo = 0
+    let hi = size - 1
+    while lo < hi {
+      let mid = floor((lo + hi) / 2)
+      if cum[mid] > r { hi = mid } else { lo = mid + 1 }
+    }
+    let key = bits(lo, s["n"])
+    counts[key] = (counts.has(key) ? counts[key] : 0) + 1
+  }
+  return counts
+}
+
+# ------------------------------------------------------------------ circuits as data
+# A circuit is a list of ops: ["h", 0], ["cnot", 0, 1], ["rz", 2, 0.5], ["ccx", 0, 1, 2] ...
+
+fn apply_op(s, op) {
+  let name = op[0]
+  if name == "h" { return h(s, op[1]) }
+  if name == "x" { return x(s, op[1]) }
+  if name == "y" { return y(s, op[1]) }
+  if name == "z" { return z(s, op[1]) }
+  if name == "s" { return s_gate(s, op[1]) }
+  if name == "sdg" { return sdg(s, op[1]) }
+  if name == "t" { return t_gate(s, op[1]) }
+  if name == "tdg" { return tdg(s, op[1]) }
+  if name == "rx" { return rx(s, op[1], op[2]) }
+  if name == "ry" { return ry(s, op[1], op[2]) }
+  if name == "rz" { return rz(s, op[1], op[2]) }
+  if name == "p" { return phase(s, op[1], op[2]) }
+  if name == "cnot" { return cnot(s, op[1], op[2]) }
+  if name == "cz" { return cz(s, op[1], op[2]) }
+  if name == "cp" { return cphase(s, op[1], op[2], op[3]) }
+  if name == "swap" { return swap(s, op[1], op[2]) }
+  if name == "ccx" { return ccx(s, op[1], op[2], op[3]) }
+  _err("unknown gate '" + str(name) + "'")
+}
+
+fn run(n, ops) {
+  let s = zero(n)
+  for op in ops { apply_op(s, op) }
+  return s
+}
+
+# Parse text such as "h 0; cnot 0 1; rz 2 0.5" (or one op per line) into a circuit.
+# Angles may be plain numbers or "pi", "pi/2", "2*pi/3".
+fn _angle(word) {
+  let w = word
+  let mult = 1.0
+  if w.contains("*") { let pr = w.split("*"); mult = float(pr[0]); w = pr[1] }
+  if w.starts_with("pi") {
+    let v = m.PI
+    if w.contains("/") { v = v / float(w.split("/")[1]) }
+    return mult * v
+  }
+  return float(w)
+}
+
+fn parse(text) {
+  let ops = []
+  let lines = text.replace("\n", ";").split(";")
+  for line in lines {
+    let words = [w for w in line.strip().lower().split(" ") if w != ""]
+    if len(words) == 0 or words[0].starts_with("#") { continue }
+    let name = words[0]
+    if name == "rx" or name == "ry" or name == "rz" or name == "p" { ops.push([name, int(words[1]), _angle(words[2])]) }
+    else if name == "cp" { ops.push([name, int(words[1]), int(words[2]), _angle(words[3])]) }
+    else { ops.push([name] + [int(w) for w in words[1:]]) }
+  }
+  return ops
+}
+
+# ------------------------------------------------------------------ ASCII circuit diagram
+
+fn draw(n, ops) {
+  let cols = []
+  for op in ops {
+    let name = op[0]
+    let col = [""] * n
+    let label = name == "cnot" or name == "ccx" ? "X" : (name == "cz" or name == "cp" ? "Z" : upper_(name))
+    if name == "cnot" { col[op[1]] = "o"; col[op[2]] = "X" }
+    else if name == "ccx" { col[op[1]] = "o"; col[op[2]] = "o"; col[op[3]] = "X" }
+    else if name == "cz" { col[op[1]] = "o"; col[op[2]] = "Z" }
+    else if name == "cp" { col[op[1]] = "o"; col[op[2]] = "P" }
+    else if name == "swap" { col[op[1]] = "x"; col[op[2]] = "x" }
+    else { col[op[1]] = label }
+    cols.push(col)
+  }
+  let lines = []
+  for k in range(n) {
+    let row = "q" + str(k) + " "
+    for col in cols {
+      let cell = col[k]
+      let w = 5
+      let padded = "--" + (cell == "" ? "-" : cell) + "--"
+      while len(padded) < w { padded = padded + "-" }
+      row = row + padded
+    }
+    lines.push(row + "--")
+  }
+  return join(lines, "\n")
+}
+
+fn upper_(name) { return name.upper() }

@@ -1,0 +1,97 @@
+import "harness" as t
+import "relativity" as rel
+import "physconst" as k
+import "physmath" as m
+import "data_physics" as ref
+
+fn worst_rel(table, f, cols) {   # max relative error of f(row) against row[cols]
+  let worst = 0.0
+  for row in table {
+    let want = row[cols]
+    let e = abs(f(row) - want) / abs(want)
+    if e > worst { worst = e }
+  }
+  return worst
+}
+
+t.suite("relativity: special relativity vs 50-digit Decimal references")
+t.check(worst_rel(ref.REF_GAMMA, fn(r) { return rel.gamma_beta(r[0]) }, 1) < 0.000000000000003, "gamma from beta = 1e-9 ... 1 - 1e-12 (worst " + m.sci(worst_rel(ref.REF_GAMMA, fn(r) { return rel.gamma_beta(r[0]) }, 1), 2) + ")")
+t.check(worst_rel(ref.REF_RAPIDITY, fn(r) { return m.atanh(r[0]) }, 1) < 0.000000000000005, "rapidity = atanh(beta)")
+let ke_worst = worst_rel(ref.REF_KE, fn(r) { return rel.kinetic_energy_j(r[0], r[1]) }, 2)
+t.check(ke_worst < 0.000000000000005, "kinetic energy stays exact from 0.01 m/s to 0.85c (worst " + m.sci(ke_worst, 2) + ")")
+t.check(worst_rel(ref.REF_ADD, fn(r) { return rel.velocity_addition(r[0], r[1]) }, 2) < 0.000000000000003, "velocity addition")
+t.check(worst_rel(ref.REF_DOPPLER, fn(r) { return rel.doppler_factor(r[0]) }, 1) < 0.000000000000003, "Doppler factor")
+for row in ref.REF_ROCKET {
+  let trip = rel.rocket_trip(row[0], row[1])
+  t.close(trip["ship_time_s"], row[2], 0.000000000001, "rocket ship time, d = " + m.sci(row[0], 2) + " m at a = " + m.fixed(row[1], 2))
+  t.close(trip["earth_time_s"], row[3], 0.000000000001, "rocket Earth time")
+  t.close(trip["top_speed_ms"], row[4], 0.000000000001, "rocket top speed")
+}
+
+t.suite("relativity: identities")
+t.close(rel.rapidity(rel.velocity_addition(0.6 * k.c, 0.7 * k.c)), rel.rapidity(0.6 * k.c) + rel.rapidity(0.7 * k.c), 0.000000000000005, "rapidities add")
+t.check(rel.velocity_addition(0.9999 * k.c, 0.9999 * k.c) < k.c, "two speeds near c never add past c")
+t.close(rel.velocity_addition(k.c, 0.5 * k.c), k.c, 0.000000000000002, "c + anything = c")
+t.close(rel.speed_from_rapidity(rel.rapidity(0.42 * k.c)), 0.42 * k.c, 0.000000000000005, "rapidity round trip")
+t.close(rel.velocity_from_redshift(rel.redshift_from_velocity(0.3 * k.c)), 0.3 * k.c, 0.000000000000005, "redshift <-> velocity round trip")
+t.close(rel.speed_from_kinetic_energy(k.m_e, rel.kinetic_energy_j(k.m_e, 0.8 * k.c)), 0.8 * k.c, 0.000000000000005, "speed <-> kinetic energy round trip")
+t.close(rel.total_energy_j(1.0, 0.6 * k.c), 1.25 * k.c * k.c, 0.000000000000003, "0.6c: gamma = 1.25")
+t.close(rel.total_energy_j(2.5, 0.0), 2.5 * k.c * k.c, 0.0, "E = m c^2 at rest")
+t.close(pow(rel.total_energy_j(1.0, 0.7 * k.c), 2), pow(rel.momentum(1.0, 0.7 * k.c) * k.c, 2) + pow(rel.rest_energy_j(1.0), 2), 0.000000000000005, "E^2 = (pc)^2 + (mc^2)^2")
+t.close(rel.mass_from_energy(rel.rest_energy_j(0.001)), 0.001, 0.000000000000002, "mass <-> energy")
+t.raises(fn() { rel.gamma(k.c) }, "gamma(c) throws")
+t.raises(fn() { rel.doppler_factor(1.5 * k.c) }, "superluminal speed throws")
+
+t.suite("relativity: published values")
+t.close(rel.gamma(0.99 * k.c), 7.0888, 0.00001, "gamma(0.99c) = 7.0888")
+t.close(rel.gamma(0.9 * k.c), 2.2942, 0.00003, "gamma(0.9c) = 2.294")
+t.close(rel.time_dilation(1.0, 0.99 * k.c), 7.0888, 0.00001, "1 year at 0.99c looks like 7.09 years from outside")
+t.close(rel.length_contraction(100.0, 0.866025403784 * k.c), 50.0, 0.000000001, "at 0.866c a 100 m ship is 50 m long")
+# x = g tau / c = 1.03227 for one Julian year; independent Python: tanh(x) = 0.774827, (c^2/g)(cosh x - 1) = 0.563642 ly, (c/g) sinh(x) = 1.18731 yr
+t.close(rel.rocket_speed(k.g0, k.year) / k.c, 0.7748267, 0.000001, "1 g for a year: 0.775c (popularly '0.77c')")
+t.close(rel.rocket_distance(k.g0, k.year) / k.ly, 0.563642, 0.00001, "1 g for a year covers 0.564 light-years (popularly '0.56')")
+t.close(rel.rocket_coordinate_time(k.g0, k.year) / k.year, 1.18731, 0.00001, "... in 1.187 years of Earth time (popularly '1.19')")
+let cen = rel.rocket_trip(4.37 * k.ly, k.g0)
+t.close(cen["ship_time_s"] / k.year, 3.58, 0.005, "Alpha Centauri at 1 g flip-and-burn: 3.6 years on the ship")
+t.close(cen["earth_time_s"] / k.year, 6.0, 0.005, "... about 6.0 years on Earth")
+t.close(rel.schwarzschild_radius(k.M_sun), 2953.25, 0.0001, "Sun: r_s = 2.95 km")
+t.close(rel.schwarzschild_radius(k.M_earth) * 1000.0, 8.870, 0.0005, "Earth: r_s = 8.87 mm")
+t.close(rel.schwarzschild_radius(4.3 * 1000000 * k.M_sun), 1.27 * pow(10, 10), 0.01, "Sagittarius A*: r_s = 1.27e10 m")
+t.close(rel.photon_sphere_radius(k.M_sun), 1.5 * rel.schwarzschild_radius(k.M_sun), 0.0, "photon sphere = 1.5 r_s")
+t.close(rel.isco_radius(k.M_sun), 3.0 * rel.schwarzschild_radius(k.M_sun), 0.0, "ISCO = 3 r_s")
+t.close(rel.hawking_temperature(k.M_sun), 6.17 * pow(10, -8), 0.001, "Hawking temperature of the Sun: 6.17e-8 K")
+t.close(rel.hawking_lifetime_s(k.M_sun) / k.year, 2.1 * pow(10, 67), 0.03, "Hawking lifetime of a solar-mass hole: 2.1e67 years")
+t.close(rel.bekenstein_hawking_entropy_kb(k.M_sun), 1.05 * pow(10, 77), 0.01, "solar-mass black hole entropy: 1.05e77 k_B")
+t.close(rel.horizon_mean_density(k.M_sun), 1.84 * pow(10, 19), 0.01, "solar-mass hole mean density: 1.84e19 kg/m^3")
+t.close(rel.weak_field_shift(9.80665, 22.5), 2.46 * pow(10, -15), 0.002, "Pound-Rebka 22.5 m tower: 2.46e-15")
+t.close(rel.escape_velocity(k.M_sun, rel.schwarzschild_radius(k.M_sun)), k.c, 0.000000000000005, "escape speed at the horizon is exactly c")
+t.close(rel.gravitational_redshift(k.M_earth, k.R_earth), 6.95 * pow(10, -10), 0.005, "light climbing out of Earth's gravity: z = 6.95e-10")
+t.close(rel.gravitational_redshift(k.M_sun, k.R_sun), 2.12 * pow(10, -6), 0.005, "light leaving the Sun's surface: z = 2.12e-6 (0.64 km/s)")
+
+t.suite("relativity: general relativity vs independent floats")
+for row in ref.REF_GR {
+  t.close(rel.schwarzschild_radius(row[0]), row[1], 0.000000000000005, "r_s for M = " + m.sci(row[0], 2) + " kg")
+  t.close(rel.hawking_temperature(row[0]), row[2], 0.000000000000005, "Hawking T")
+  t.close(rel.hawking_lifetime_s(row[0]), row[3], 0.00000000000001, "Hawking lifetime")
+  t.close(rel.bekenstein_hawking_entropy_kb(row[0]), row[4], 0.00000000000001, "entropy")
+  t.close(rel.horizon_mean_density(row[0]), row[5], 0.00000000000001, "horizon density")
+}
+let worst_grt = 0.0
+for row in ref.REF_GRT {
+  let e1 = abs(rel.gravitational_time_factor(row[0], row[1]) - row[2]) / row[2]
+  let e2 = abs(rel.gravitational_redshift(row[0], row[1]) - row[3]) / row[3]
+  let e3 = abs(rel.escape_velocity(row[0], row[1]) - row[4]) / row[4]
+  for e in [e1, e2, e3] { if e > worst_grt { worst_grt = e } }
+}
+t.check(worst_grt < 0.00000000000003, "time factor, redshift and escape speed at 20 random radii (worst " + m.sci(worst_grt, 2) + ")")
+t.raises(fn() { rel.gravitational_time_factor(k.M_sun, 2000.0) }, "inside the horizon throws")
+
+t.suite("relativity: GPS")
+t.close(rel.gps_clock_offset_us_per_day(), 38.44, 0.001, "GPS: satellite clocks gain ~38.4 microseconds per day")
+t.close(rel.gps_gravitational_rate() * 86400.0 * 1000000.0, 45.7, 0.005, "... +45.7 us/day from weaker gravity")
+t.close(rel.gps_velocity_rate() * 86400.0 * 1000000.0, -7.2, 0.01, "... -7.2 us/day from orbital speed")
+t.close(rel.gps_uncorrected_error_km_per_day(), 11.5, 0.01, "uncorrected, position error grows ~11 km per day")
+for row in ref.REF_GPS {
+  t.close(rel.gps_clock_offset_us_per_day(row[0]), row[1], 0.00000000000001, "GPS offset at r = " + m.fixed(row[0] / 1000.0, 0) + " km")
+}
+t.finish()

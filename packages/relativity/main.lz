@@ -1,0 +1,172 @@
+# relativity - special and general relativity calculators, in SI units.
+#
+#   import "relativity" as rel
+#   import "physconst" as k
+#   print(rel.gamma(0.99 * k.c))                         # 7.0888
+#   print(rel.schwarzschild_radius(k.M_sun))             # 2953.25 m
+#   print(rel.gps_clock_offset_us_per_day())             # +38.45 microseconds per day
+#
+# Special relativity: gamma, time dilation, length contraction, velocity addition, Doppler,
+# E = gamma m c^2, rapidity, and the constant-acceleration "relativistic rocket".
+# General relativity (Schwarzschild vacuum): event horizon, gravitational time dilation and
+# redshift, photon sphere, ISCO, Hawking temperature and lifetime, Bekenstein-Hawking
+# entropy, and the GPS clock correction. Validated in tests/test_relativity.lz against
+# independent calculations and published values (GPS +38 us/day, Pound-Rebka 2.46e-15,
+# Sun r_s = 2.95 km, Earth r_s = 8.87 mm, Hawking T(Sun) = 6.17e-8 K).
+#
+# Numerical care: 1 - beta^2 is computed as (1 - beta)(1 + beta), so gamma stays accurate as
+# beta -> 1; kinetic energy uses (gamma - 1) = beta^2 gamma^2 / (gamma + 1) to avoid
+# cancellation at low speed.
+
+import "physmath" as m
+import "physconst" as k
+
+fn _err(msg) { throw {"type": "LarzValueError", "message": "relativity: " + msg} }
+
+# ------------------------------------------------------------------ special relativity
+
+fn beta(v_ms) { return v_ms / k.c }
+
+fn gamma_beta(b) {
+  if abs(b) >= 1.0 { _err("speed must be below the speed of light") }
+  return 1.0 / m.sqrt_((1.0 - b) * (1.0 + b))
+}
+fn gamma(v_ms) { return gamma_beta(v_ms / k.c) }
+
+# When `proper_time` passes on a clock moving at v, a stationary observer measures gamma * tau.
+fn time_dilation(proper_time, v_ms) { return proper_time * gamma(v_ms) }
+fn length_contraction(proper_length, v_ms) { return proper_length / gamma(v_ms) }
+
+# collinear velocity addition: (u + v) / (1 + u v / c^2)
+fn velocity_addition(u_ms, v_ms) { return (u_ms + v_ms) / (1.0 + u_ms * v_ms / (k.c * k.c)) }
+
+# rapidity = atanh(beta). Rapidities add; velocities do not.
+fn rapidity(v_ms) {
+  let b = v_ms / k.c
+  if abs(b) >= 1.0 { _err("speed must be below the speed of light") }
+  return m.atanh(b)
+}
+fn speed_from_rapidity(rap) { return k.c * m.tanh(rap) }
+
+# f_observed / f_source for radial motion; v > 0 means source and observer APPROACH (blueshift)
+fn doppler_factor(v_ms) {
+  let b = v_ms / k.c
+  if abs(b) >= 1.0 { _err("speed must be below the speed of light") }
+  return m.sqrt_((1.0 + b) / (1.0 - b))
+}
+# z = (lambda_observed - lambda_emitted) / lambda_emitted for a source RECEDING at v
+fn redshift_from_velocity(v_receding_ms) { return doppler_factor(v_receding_ms) - 1.0 }
+# the speed that produces redshift z: (1+z)^2 = (1+b)/(1-b)  ->  b = ((1+z)^2 - 1) / ((1+z)^2 + 1)
+fn velocity_from_redshift(z) {
+  let a = (1.0 + z) * (1.0 + z)
+  return k.c * (a - 1.0) / (a + 1.0)
+}
+
+fn rest_energy_j(mass_kg) { return mass_kg * k.c * k.c }
+fn total_energy_j(mass_kg, v_ms) { return gamma(v_ms) * mass_kg * k.c * k.c }
+# kinetic energy (gamma - 1) m c^2, computed without the 1 - 1 cancellation
+fn kinetic_energy_j(mass_kg, v_ms) {
+  let g = gamma(v_ms)
+  let b = v_ms / k.c
+  return b * b * g * g / (g + 1.0) * mass_kg * k.c * k.c
+}
+fn momentum(mass_kg, v_ms) { return gamma(v_ms) * mass_kg * v_ms }
+
+# speed of a particle of rest mass `mass_kg` with kinetic energy `ke_j`
+fn speed_from_kinetic_energy(mass_kg, ke_j) {
+  let x = ke_j / (mass_kg * k.c * k.c)            # gamma - 1
+  let g = 1.0 + x
+  return k.c * m.sqrt_(x * (g + 1.0)) / g
+}
+
+# mass (kg) equivalent to an energy (J): m = E / c^2
+fn mass_from_energy(energy_j) { return energy_j / (k.c * k.c) }
+
+# ---- the relativistic rocket: constant PROPER acceleration a (m/s^2) for proper time tau (s)
+fn rocket_speed(accel, tau) { return k.c * m.tanh(accel * tau / k.c) }
+fn rocket_gamma(accel, tau) { return m.cosh(accel * tau / k.c) }
+fn rocket_coordinate_time(accel, tau) { return k.c / accel * m.sinh(accel * tau / k.c) }
+fn rocket_distance(accel, tau) {
+  let x = accel * tau / k.c
+  return k.c * k.c / accel * (m.cosh(x) - 1.0)
+}
+
+# Trip of length `distance_m` accelerating at `accel` for the first half and decelerating for the
+# second (flip-and-burn). Returns proper (ship) time, coordinate (Earth) time, top speed.
+fn rocket_trip(distance_m, accel) {
+  # cosh(a tau / c) = 1 + tt at the turnaround, with tt = a d / (2 c^2). tt is tiny for slow trips, so it is
+  # carried on its own (never as 1 + tt, which would throw away its digits) into acosh / sqrt(cosh^2 - 1).
+  let tt = accel * (distance_m / 2.0) / (k.c * k.c)
+  let root = m.sqrt_(tt * (2.0 + tt))                   # sinh(a tau / c)
+  let tau_half = k.c / accel * m.log1p(tt + root)       # acosh(1 + tt)
+  let t_half = k.c / accel * root
+  return {"ship_time_s": 2.0 * tau_half, "earth_time_s": 2.0 * t_half,
+          "top_speed_ms": k.c * root / (1.0 + tt), "gamma_max": 1.0 + tt}
+}
+
+# ------------------------------------------------------------------ general relativity (Schwarzschild)
+
+# event-horizon radius r_s = 2GM/c^2
+fn schwarzschild_radius(mass_kg) { return 2.0 * k.G * mass_kg / (k.c * k.c) }
+fn photon_sphere_radius(mass_kg) { return 1.5 * schwarzschild_radius(mass_kg) }
+# innermost stable circular orbit (non-spinning): 3 r_s = 6GM/c^2
+fn isco_radius(mass_kg) { return 3.0 * schwarzschild_radius(mass_kg) }
+fn mass_from_schwarzschild_radius(r_s_m) { return r_s_m * k.c * k.c / (2.0 * k.G) }
+
+# mean density inside the horizon: M / (4/3 pi r_s^3)
+fn horizon_mean_density(mass_kg) {
+  let r = schwarzschild_radius(mass_kg)
+  return mass_kg / (4.0 / 3.0 * m.PI * r * r * r)
+}
+
+# d tau / d t for a static clock at radius r (m) from mass M: sqrt(1 - r_s / r)
+fn gravitational_time_factor(mass_kg, r_m) {
+  let x = schwarzschild_radius(mass_kg) / r_m
+  if x >= 1.0 { _err("radius is at or inside the event horizon") }
+  return m.sqrt_(1.0 - x)
+}
+
+# redshift z of light emitted at r and received far away: 1 / sqrt(1 - r_s/r) - 1
+# Written as x / (f (1 + f)) with f = sqrt(1 - x): identical to 1/f - 1 but with no cancellation in weak fields.
+fn gravitational_redshift(mass_kg, r_m) {
+  let x = schwarzschild_radius(mass_kg) / r_m
+  let f = gravitational_time_factor(mass_kg, r_m)
+  return x / (f * (1.0 + f))
+}
+
+# weak-field fractional frequency shift over a height h near a surface of gravity g: g h / c^2
+fn weak_field_shift(g_ms2, height_m) { return g_ms2 * height_m / (k.c * k.c) }
+
+# escape speed from radius r: sqrt(2GM/r) - equals c exactly at the horizon
+fn escape_velocity(mass_kg, r_m) { return m.sqrt_(2.0 * k.G * mass_kg / r_m) }
+
+# Hawking temperature: hbar c^3 / (8 pi G M kB)
+fn hawking_temperature(mass_kg) { return k.hbar * k.c * k.c * k.c / (8.0 * m.PI * k.G * mass_kg * k.kB) }
+# Hawking evaporation time (photon-only approximation): 5120 pi G^2 M^3 / (hbar c^4), seconds
+fn hawking_lifetime_s(mass_kg) { return 5120.0 * m.PI * k.G * k.G * mass_kg * mass_kg * mass_kg / (k.hbar * pow(k.c, 4)) }
+# Bekenstein-Hawking entropy in units of kB: S / kB = c^3 A / (4 G hbar), A = 4 pi r_s^2
+fn bekenstein_hawking_entropy_kb(mass_kg) {
+  let r = schwarzschild_radius(mass_kg)
+  let area = 4.0 * m.PI * r * r
+  return pow(k.c, 3) * area / (4.0 * k.G * k.hbar)
+}
+
+# ------------------------------------------------------------------ GPS
+
+# Net clock-rate offset of a satellite clock relative to a ground clock (Earth non-rotating,
+# circular orbit of radius r): gravitational blueshift +GM/c^2 (1/R - 1/r), velocity -v^2/(2c^2).
+# Returns seconds gained per second; multiply by 86400e6 for microseconds per day.
+fn gps_gravitational_rate(orbit_radius_m=26561750.0) {
+  return k.GM_earth / (k.c * k.c) * (1.0 / k.R_earth - 1.0 / orbit_radius_m)
+}
+fn gps_velocity_rate(orbit_radius_m=26561750.0) {
+  let v2 = k.GM_earth / orbit_radius_m
+  return -v2 / (2.0 * k.c * k.c)
+}
+fn gps_clock_offset_us_per_day(orbit_radius_m=26561750.0) {
+  return (gps_gravitational_rate(orbit_radius_m) + gps_velocity_rate(orbit_radius_m)) * 86400.0 * 1000000.0
+}
+# the position error that would build up per day if the correction were ignored (light travels c * dt)
+fn gps_uncorrected_error_km_per_day(orbit_radius_m=26561750.0) {
+  return gps_clock_offset_us_per_day(orbit_radius_m) * 0.000001 * k.c / 1000.0
+}

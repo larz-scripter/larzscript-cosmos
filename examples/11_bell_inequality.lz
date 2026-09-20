@@ -1,0 +1,7 @@
+# The CHSH inequality: no local hidden-variable theory exceeds 2; quantum mechanics reaches 2*sqrt(2).
+import "qalgo" as qa
+import "physmath" as m
+
+print("classical maximum:      " + str(qa.chsh_classical_max()))
+print("quantum, best angles:   " + m.fixed(qa.chsh(), 6) + "   (2 sqrt 2 = " + m.fixed(2.0 * sqrt(2), 6) + ")")
+print("quantum, all aligned:   " + m.fixed(qa.chsh(0.0, 0.0, 0.0, 0.0), 6))

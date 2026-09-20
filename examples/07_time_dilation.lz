@@ -1,0 +1,11 @@
+# How much does a moving clock lag after one year?
+import "relativity" as rel
+import "physconst" as k
+import "physmath" as m
+
+for row in [["airliner", 250.0], ["ISS", 7660.0], ["GPS satellite", 3874.0], ["0.5 c", 0.5 * k.c], ["0.9 c", 0.9 * k.c], ["0.99 c", 0.99 * k.c], ["0.9999 c", 0.9999 * k.c]] {
+  let g = rel.gamma(row[1])
+  let b = row[1] / k.c
+  let lag = b * b * g * g / (g + 1.0) * k.year        # (gamma - 1) years, without cancellation
+  print(row[0] + ": gamma = " + m.sig(g, 8) + ", clocks differ by " + m.sig(lag, 4) + " s per year")
+}

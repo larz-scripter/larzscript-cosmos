@@ -1,0 +1,5 @@
+4 items: 1 iterations, P(found) = 1.000000  (a classical search needs ~3 guesses)
+16 items: 3 iterations, P(found) = 0.961319  (a classical search needs ~9 guesses)
+64 items: 6 iterations, P(found) = 0.996586  (a classical search needs ~33 guesses)
+256 items: 12 iterations, P(found) = 0.999947  (a classical search needs ~129 guesses)
+1024 items: 25 iterations, P(found) = 0.999461  (a classical search needs ~513 guesses)

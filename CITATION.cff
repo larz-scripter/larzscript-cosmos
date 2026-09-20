@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "larzscript-cosmos: quantum computing, quantum mechanics, relativity and astrophysics in Larzscript"
+type: software
+authors:
+  - name: "larz-scripter"
+repository-code: "https://github.com/larz-scripter/larzscript-cosmos"
+url: "https://larzos.com/cosmos/"
+license: MIT
+version: 0.1.0
+date-released: "2026-09-20"
+keywords:
+  - quantum computing
+  - quantum simulator
+  - quantum mechanics
+  - special relativity
+  - general relativity
+  - cosmology
+  - larzscript

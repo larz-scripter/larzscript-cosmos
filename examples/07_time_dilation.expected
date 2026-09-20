@@ -1,0 +1,7 @@
+airliner: gamma = 1.0000000, clocks differ by 1.097e-05 s per year
+ISS: gamma = 1.0000000, clocks differ by 0.01030 s per year
+GPS satellite: gamma = 1.0000000, clocks differ by 0.002635 s per year
+0.5 c: gamma = 1.1547005, clocks differ by 4.882e+06 s per year
+0.9 c: gamma = 2.2941573, clocks differ by 4.084e+07 s per year
+0.99 c: gamma = 7.0888121, clocks differ by 1.921e+08 s per year
+0.9999 c: gamma = 70.712446, clocks differ by 2.200e+09 s per year

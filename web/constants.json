@@ -1,0 +1,371 @@
+{
+ "c": {
+  "value": 299792458.0,
+  "sci": "2.99792458000E+08",
+  "unit": "m/s",
+  "kind": "exact",
+  "source": "SI 2019",
+  "note": "speed of light in vacuum",
+  "uncertainty": ""
+ },
+ "h": {
+  "value": 6.62607015e-34,
+  "sci": "6.62607015000E-34",
+  "unit": "J s",
+  "kind": "exact",
+  "source": "SI 2019",
+  "note": "Planck constant",
+  "uncertainty": ""
+ },
+ "e": {
+  "value": 1.602176634e-19,
+  "sci": "1.60217663400E-19",
+  "unit": "C",
+  "kind": "exact",
+  "source": "SI 2019",
+  "note": "elementary charge",
+  "uncertainty": ""
+ },
+ "kB": {
+  "value": 1.380649e-23,
+  "sci": "1.38064900000E-23",
+  "unit": "J/K",
+  "kind": "exact",
+  "source": "SI 2019",
+  "note": "Boltzmann constant",
+  "uncertainty": ""
+ },
+ "NA": {
+  "value": 6.02214076e+23,
+  "sci": "6.02214076000E+23",
+  "unit": "1/mol",
+  "kind": "exact",
+  "source": "SI 2019",
+  "note": "Avogadro constant",
+  "uncertainty": ""
+ },
+ "hbar": {
+  "value": 1.0545718176461565e-34,
+  "sci": "1.05457181765E-34",
+  "unit": "J s",
+  "kind": "derived",
+  "source": "h / 2 pi",
+  "note": "reduced Planck constant",
+  "uncertainty": ""
+ },
+ "R": {
+  "value": 8.31446261815324,
+  "sci": "8.31446261815E+00",
+  "unit": "J/(mol K)",
+  "kind": "derived",
+  "source": "N_A k_B",
+  "note": "molar gas constant",
+  "uncertainty": ""
+ },
+ "F": {
+  "value": 96485.33212331001,
+  "sci": "9.64853321233E+04",
+  "unit": "C/mol",
+  "kind": "derived",
+  "source": "N_A e",
+  "note": "Faraday constant",
+  "uncertainty": ""
+ },
+ "sigma": {
+  "value": 5.6703744191844294e-08,
+  "sci": "5.67037441918E-08",
+  "unit": "W/(m^2 K^4)",
+  "kind": "derived",
+  "source": "2 pi^5 k^4 / (15 h^3 c^2)",
+  "note": "Stefan-Boltzmann constant",
+  "uncertainty": ""
+ },
+ "wien_b": {
+  "value": 0.0028977719551851727,
+  "sci": "2.89777195519E-03",
+  "unit": "m K",
+  "kind": "derived",
+  "source": "h c / (k x), x = 4.965114231744276",
+  "note": "Wien displacement constant",
+  "uncertainty": ""
+ },
+ "eV": {
+  "value": 1.602176634e-19,
+  "sci": "1.60217663400E-19",
+  "unit": "J",
+  "kind": "derived",
+  "source": "e (1 V x 1 C)",
+  "note": "one electronvolt in joules",
+  "uncertainty": ""
+ },
+ "g0": {
+  "value": 9.80665,
+  "sci": "9.80665000000E+00",
+  "unit": "m/s^2",
+  "kind": "exact",
+  "source": "ISO 80000-3",
+  "note": "standard gravity",
+  "uncertainty": ""
+ },
+ "atm": {
+  "value": 101325.0,
+  "sci": "1.01325000000E+05",
+  "unit": "Pa",
+  "kind": "exact",
+  "source": "ISO 80000-4",
+  "note": "standard atmosphere",
+  "uncertainty": ""
+ },
+ "G": {
+  "value": 6.6743e-11,
+  "sci": "6.67430000000E-11",
+  "unit": "m^3/(kg s^2)",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "Newtonian constant of gravitation",
+  "uncertainty": "1.5E-15"
+ },
+ "m_e": {
+  "value": 9.1093837015e-31,
+  "sci": "9.10938370150E-31",
+  "unit": "kg",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "electron mass",
+  "uncertainty": "2.8E-40"
+ },
+ "m_p": {
+  "value": 1.67262192369e-27,
+  "sci": "1.67262192369E-27",
+  "unit": "kg",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "proton mass",
+  "uncertainty": "5.1E-37"
+ },
+ "m_n": {
+  "value": 1.67492749804e-27,
+  "sci": "1.67492749804E-27",
+  "unit": "kg",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "neutron mass",
+  "uncertainty": "9.5E-37"
+ },
+ "u": {
+  "value": 1.6605390666e-27,
+  "sci": "1.66053906660E-27",
+  "unit": "kg",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "atomic mass constant",
+  "uncertainty": "5.0E-37"
+ },
+ "alpha": {
+  "value": 0.0072973525693,
+  "sci": "7.29735256930E-03",
+  "unit": "",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "fine-structure constant",
+  "uncertainty": "1.1E-12"
+ },
+ "eps0": {
+  "value": 8.8541878128e-12,
+  "sci": "8.85418781280E-12",
+  "unit": "F/m",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "vacuum electric permittivity",
+  "uncertainty": "1.3E-21"
+ },
+ "mu0": {
+  "value": 1.25663706212e-06,
+  "sci": "1.25663706212E-06",
+  "unit": "N/A^2",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "vacuum magnetic permeability",
+  "uncertainty": "1.9E-16"
+ },
+ "Rinf": {
+  "value": 10973731.56816,
+  "sci": "1.09737315682E+07",
+  "unit": "1/m",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "Rydberg constant",
+  "uncertainty": "2.1E-5"
+ },
+ "a0": {
+  "value": 5.29177210903e-11,
+  "sci": "5.29177210903E-11",
+  "unit": "m",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "Bohr radius",
+  "uncertainty": "8.0E-21"
+ },
+ "lambda_C": {
+  "value": 2.42631023867e-12,
+  "sci": "2.42631023867E-12",
+  "unit": "m",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "electron Compton wavelength",
+  "uncertainty": "7.3E-22"
+ },
+ "r_e": {
+  "value": 2.8179403262e-15,
+  "sci": "2.81794032620E-15",
+  "unit": "m",
+  "kind": "measured",
+  "source": "CODATA18",
+  "note": "classical electron radius",
+  "uncertainty": "1.3E-24"
+ },
+ "AU": {
+  "value": 149597870700.0,
+  "sci": "1.49597870700E+11",
+  "unit": "m",
+  "kind": "exact",
+  "source": "IAU 2012 B2",
+  "note": "astronomical unit",
+  "uncertainty": ""
+ },
+ "day": {
+  "value": 86400.0,
+  "sci": "8.64000000000E+04",
+  "unit": "s",
+  "kind": "exact",
+  "source": "SI",
+  "note": "day",
+  "uncertainty": ""
+ },
+ "year": {
+  "value": 31557600.0,
+  "sci": "3.15576000000E+07",
+  "unit": "s",
+  "kind": "exact",
+  "source": "IAU (Julian year)",
+  "note": "Julian year = 365.25 d",
+  "uncertainty": ""
+ },
+ "ly": {
+  "value": 9460730472580800.0,
+  "sci": "9.46073047258E+15",
+  "unit": "m",
+  "kind": "derived",
+  "source": "c x Julian year",
+  "note": "light-year",
+  "uncertainty": ""
+ },
+ "pc": {
+  "value": 3.085677581491367e+16,
+  "sci": "3.08567758149E+16",
+  "unit": "m",
+  "kind": "derived",
+  "source": "648000/pi AU",
+  "note": "parsec",
+  "uncertainty": ""
+ },
+ "GM_sun": {
+  "value": 1.3271244e+20,
+  "sci": "1.32712440000E+20",
+  "unit": "m^3/s^2",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "solar mass parameter (nominal)",
+  "uncertainty": ""
+ },
+ "R_sun": {
+  "value": 695700000.0,
+  "sci": "6.95700000000E+08",
+  "unit": "m",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "solar radius (nominal)",
+  "uncertainty": ""
+ },
+ "L_sun": {
+  "value": 3.828e+26,
+  "sci": "3.82800000000E+26",
+  "unit": "W",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "solar luminosity (nominal)",
+  "uncertainty": ""
+ },
+ "T_sun": {
+  "value": 5772.0,
+  "sci": "5.77200000000E+03",
+  "unit": "K",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "solar effective temperature (nominal)",
+  "uncertainty": ""
+ },
+ "GM_earth": {
+  "value": 398600400000000.0,
+  "sci": "3.98600400000E+14",
+  "unit": "m^3/s^2",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "terrestrial mass parameter (nominal)",
+  "uncertainty": ""
+ },
+ "R_earth": {
+  "value": 6378100.0,
+  "sci": "6.37810000000E+06",
+  "unit": "m",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "Earth equatorial radius (nominal)",
+  "uncertainty": ""
+ },
+ "GM_jup": {
+  "value": 1.2668653e+17,
+  "sci": "1.26686530000E+17",
+  "unit": "m^3/s^2",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "Jovian mass parameter (nominal)",
+  "uncertainty": ""
+ },
+ "R_jup": {
+  "value": 71492000.0,
+  "sci": "7.14920000000E+07",
+  "unit": "m",
+  "kind": "nominal",
+  "source": "IAU 2015 B3",
+  "note": "Jupiter equatorial radius (nominal)",
+  "uncertainty": ""
+ },
+ "T_cmb": {
+  "value": 2.7255,
+  "sci": "2.72550000000E+00",
+  "unit": "K",
+  "kind": "measured",
+  "source": "Fixsen 2009",
+  "note": "cosmic microwave background temperature",
+  "uncertainty": "6E-4"
+ },
+ "M_sun": {
+  "value": 1.9884098706980507e+30,
+  "sci": "1.98840987070E+30",
+  "unit": "kg",
+  "kind": "derived",
+  "source": "GM_sun / G",
+  "note": "solar mass",
+  "uncertainty": ""
+ },
+ "M_earth": {
+  "value": 5.972167867791379e+24,
+  "sci": "5.97216786779E+24",
+  "unit": "kg",
+  "kind": "derived",
+  "source": "GM_earth / G",
+  "note": "Earth mass",
+  "uncertainty": ""
+ }
+}

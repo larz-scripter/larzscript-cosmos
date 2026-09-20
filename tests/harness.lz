@@ -1,0 +1,52 @@
+# harness - a tiny, dependency-free test helper shared by every tests/test_*.lz.
+#
+#   import "harness" as t
+#   t.suite("my package")
+#   t.close(actual, expected, 0.000001, "what is being checked")   # relative (absolute near 0)
+#   t.check(cond, "label")
+#   t.raises(fn() { risky() }, "label")
+#   t.finish()                                                     # prints a summary, exits 1 on failure
+
+let _pass = 0
+let _fail = 0
+let _fails = []
+let _suite = ""
+
+fn suite(name) { _suite = name; print("== " + name) }
+
+fn _bad(label, detail) {
+  _fail = _fail + 1
+  _fails.push(_suite + ": " + label)
+  print("  FAIL " + label + (detail == "" ? "" : "  (" + detail + ")"))
+}
+
+fn check(cond, label) {
+  if cond { _pass = _pass + 1 } else { _bad(label, "") }
+}
+
+# |actual - expected| <= tol * |expected| ; absolute when expected is ~0.
+fn close(actual, expected, tol, label) {
+  if type(actual) != "number" { _bad(label, "got " + str(actual)); return false }
+  let diff = abs(actual - expected)
+  let scale = abs(expected)
+  let limit = scale > 0.000000000001 ? tol * scale : tol
+  if diff <= limit { _pass = _pass + 1; return true }
+  _bad(label, "got " + str(actual) + ", expected " + str(expected) + ", diff " + str(diff))
+  return false
+}
+
+fn equal(actual, expected, label) {
+  if actual == expected { _pass = _pass + 1 } else { _bad(label, "got " + str(actual) + ", expected " + str(expected)) }
+}
+
+fn raises(f, label) {
+  let threw = false
+  try { f() } catch e { threw = true }
+  if threw { _pass = _pass + 1 } else { _bad(label, "expected an error, none thrown") }
+}
+
+fn finish() {
+  print("")
+  print(str(_pass) + " passed, " + str(_fail) + " failed")
+  if _fail > 0 { exit(1) }
+}

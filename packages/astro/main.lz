@@ -1,0 +1,143 @@
+# astro - stars, planets, distances and cosmology, in SI units (helpers for light-years,
+# parsecs, AU and Gyr included).
+#
+#   import "astro" as a
+#   import "physconst" as k
+#   print(a.light_travel_time_s(k.AU) / 60)           # 8.32 minutes: sunlight to Earth
+#   print(a.star_luminosity_w(k.R_sun, k.T_sun))      # 3.83e26 W (the Sun, from R and T alone)
+#   print(a.hubble_age_gyr(67.4, 0.315))              # 13.8 Gyr (Planck 2018 flat LCDM)
+#
+# Stellar physics: Stefan-Boltzmann, Wien, magnitudes and distance modulus, equilibrium
+# temperature, transit depth, surface gravity, Kepler's third law.
+# Cosmology: Hubble law, comoving distance and age in flat LCDM by Simpson integration
+# (exact analytic Einstein-de Sitter check in the tests). Validated in tests/test_astro.lz.
+
+import "physmath" as m
+import "physconst" as k
+
+fn _err(msg) { throw {"type": "LarzValueError", "message": "astro: " + msg} }
+
+# ------------------------------------------------------------------ distances and light
+
+fn m_to_ly(meters) { return meters / k.ly }
+fn ly_to_m(ly) { return ly * k.ly }
+fn m_to_pc(meters) { return meters / k.pc }
+fn pc_to_m(pc) { return pc * k.pc }
+fn m_to_au(meters) { return meters / k.AU }
+fn au_to_m(au) { return au * k.AU }
+fn ly_to_pc(ly) { return ly * k.ly / k.pc }
+fn pc_to_ly(pc) { return pc * k.pc / k.ly }
+
+fn light_travel_time_s(distance_m) { return distance_m / k.c }
+fn light_travel_time_years(distance_m) { return distance_m / k.ly }
+
+# distance in parsecs from a parallax angle in arcseconds
+fn parallax_distance_pc(parallax_arcsec) {
+  if parallax_arcsec <= 0 { _err("parallax must be positive") }
+  return 1.0 / parallax_arcsec
+}
+
+# ------------------------------------------------------------------ stars
+
+# L = 4 pi R^2 sigma T^4
+fn star_luminosity_w(radius_m, temperature_k) { return 4.0 * m.PI * radius_m * radius_m * k.sigma * pow(temperature_k, 4) }
+# R = sqrt(L / (4 pi sigma T^4))
+fn star_radius_m(luminosity_w, temperature_k) { return m.sqrt_(luminosity_w / (4.0 * m.PI * k.sigma * pow(temperature_k, 4))) }
+# T = (L / (4 pi R^2 sigma))^(1/4)
+fn star_temperature_k(luminosity_w, radius_m) { return m.powf(luminosity_w / (4.0 * m.PI * radius_m * radius_m * k.sigma), 0.25) }
+
+# Wien's displacement law: the wavelength where a blackbody at T emits most (metres)
+fn wien_peak_wavelength_m(temperature_k) { return k.wien_b / temperature_k }
+fn wien_temperature_k(peak_wavelength_m) { return k.wien_b / peak_wavelength_m }
+
+# bolometric absolute magnitude of a luminosity (IAU 2015: M = 4.74 for L = 3.828e26 W)
+fn absolute_magnitude(luminosity_w) { return 4.74 - 2.5 * m.log10(luminosity_w / k.L_sun) }
+fn luminosity_from_absolute_magnitude(mag) { return k.L_sun * m.powf(10.0, -0.4 * (mag - 4.74)) }
+
+# distance modulus m - M = 5 log10(d / 10 pc)
+fn distance_modulus(distance_pc) { return 5.0 * m.log10(distance_pc / 10.0) }
+fn distance_from_modulus_pc(mu) { return 10.0 * m.powf(10.0, mu / 5.0) }
+
+# apparent flux (W/m^2) at distance d: L / (4 pi d^2)
+fn flux_w_m2(luminosity_w, distance_m) { return luminosity_w / (4.0 * m.PI * distance_m * distance_m) }
+
+# main-sequence mass-luminosity rule of thumb, L ~ M^3.5 (0.43 < M/Msun < 2 only)
+fn mass_luminosity_solar(mass_solar) { return m.powf(mass_solar, 3.5) }
+
+# ------------------------------------------------------------------ planets
+
+# radiative-equilibrium temperature of a planet: T_star sqrt(R_star / (2a)) (1 - A)^(1/4)
+fn equilibrium_temperature_k(star_temp_k, star_radius_m, orbit_m, albedo=0.3) {
+  return star_temp_k * m.sqrt_(star_radius_m / (2.0 * orbit_m)) * m.powf(1.0 - albedo, 0.25)
+}
+# the orbit (m) at which a planet of the given albedo reaches equilibrium temperature T
+fn orbit_for_temperature_m(luminosity_w, temp_k, albedo=0.3) {
+  return m.sqrt_(luminosity_w * (1.0 - albedo) / (16.0 * m.PI * k.sigma * pow(temp_k, 4)))
+}
+# NOTE: an equilibrium-temperature band is NOT a habitable zone. Earth's equilibrium temperature
+# is ~255 K (below freezing) yet its surface averages ~288 K thanks to the greenhouse effect, and
+# real habitable-zone limits come from climate models (Kopparapu et al. 2013), not from this formula.
+
+# transit depth (fraction of starlight blocked): (Rp / Rs)^2
+fn transit_depth(planet_radius_m, star_radius_m) {
+  let r = planet_radius_m / star_radius_m
+  return r * r
+}
+
+# g = GM / R^2
+fn surface_gravity(gm_m3_s2, radius_m) { return gm_m3_s2 / (radius_m * radius_m) }
+fn escape_speed(gm_m3_s2, radius_m) { return m.sqrt_(2.0 * gm_m3_s2 / radius_m) }
+
+# Kepler's third law: T = 2 pi sqrt(a^3 / GM)  (a in m, GM of the central body, result in seconds)
+fn orbital_period_s(semi_major_m, gm_m3_s2) { return m.TAU * m.sqrt_(semi_major_m * semi_major_m * semi_major_m / gm_m3_s2) }
+fn semi_major_from_period_m(period_s, gm_m3_s2) { return m.powf(gm_m3_s2 * period_s * period_s / (4.0 * m.PI * m.PI), 1.0 / 3.0) }
+
+# ------------------------------------------------------------------ cosmology (flat LCDM)
+
+# Hubble's law at low redshift: v = H0 d,  H0 in km/s/Mpc; distances in Mpc, speeds in km/s
+fn hubble_velocity_kms(h0, distance_mpc) { return h0 * distance_mpc }
+fn hubble_distance_mpc(h0, velocity_kms) { return velocity_kms / h0 }
+
+# dimensionless expansion rate E(z) = H(z)/H0 for flat LCDM (Omega_Lambda = 1 - Omega_m)
+fn _e_of_z(z, omega_m) { return m.sqrt_(omega_m * (1.0 + z) * (1.0 + z) * (1.0 + z) + (1.0 - omega_m)) }
+
+# composite Simpson's rule of f on [lo, hi] with `steps` (even) intervals
+fn _simpson(f, lo, hi, steps) {
+  let hh = (hi - lo) / steps
+  let total = f(lo) + f(hi)
+  for i in range(1, steps) { total = total + (i % 2 == 1 ? 4.0 : 2.0) * f(lo + i * hh) }
+  return total * hh / 3.0
+}
+
+# Hubble distance c / H0 in Mpc
+fn hubble_distance_c_mpc(h0) { return k.c / 1000.0 / h0 }
+
+# comoving distance to redshift z in Mpc: (c/H0) integral_0^z dz' / E(z').
+# Integrated in u = ln(1 + z) (dz = e^u du), which keeps the integrand smooth from z = 0 to the
+# CMB at z ~ 1100 - plain Simpson in z is off by 3e-4 out there.
+fn comoving_distance_mpc(z, h0, omega_m) {
+  let f = fn(u) { let ez = m.exp(u); return ez / _e_of_z(ez - 1.0, omega_m) }
+  return hubble_distance_c_mpc(h0) * _simpson(f, 0.0, m.log1p(z), 2000)
+}
+fn luminosity_distance_mpc(z, h0, omega_m) { return (1.0 + z) * comoving_distance_mpc(z, h0, omega_m) }
+fn angular_diameter_distance_mpc(z, h0, omega_m) { return comoving_distance_mpc(z, h0, omega_m) / (1.0 + z) }
+
+# age of the universe at redshift z in Gyr: (1/H0) integral_z^inf dz' / ((1+z') E(z')),
+# by substituting a = 1/(1+z) which makes the range finite: t = (1/H0) integral_0^a da / (a E(a))
+fn age_gyr_at_redshift(z, h0, omega_m) {
+  let a1 = 1.0 / (1.0 + z)
+  let f = fn(a) {
+    if a <= 0.0 { return 0.0 }
+    let zz = 1.0 / a - 1.0
+    return 1.0 / (a * _e_of_z(zz, omega_m))
+  }
+  # integrand ~ sqrt(a) near 0 -> substitute a = u^2 to remove the square-root singularity
+  let g = fn(u) { return 2.0 * u * f(u * u) }
+  let seconds_per_gyr = 31557600.0 * 1000000000.0
+  let h0_per_s = h0 * 1000.0 / (k.pc * 1000000.0)          # km/s/Mpc -> 1/s
+  return _simpson(g, 0.0, m.sqrt_(a1), 4000) / h0_per_s / seconds_per_gyr
+}
+fn hubble_age_gyr(h0, omega_m) { return age_gyr_at_redshift(0.0, h0, omega_m) }
+
+# look-back time to redshift z in Gyr
+fn lookback_time_gyr(z, h0, omega_m) { return hubble_age_gyr(h0, omega_m) - age_gyr_at_redshift(z, h0, omega_m) }

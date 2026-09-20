@@ -1,0 +1,8 @@
+# GPS satellite clocks: gravity speeds them up, orbital speed slows them down.
+import "relativity" as rel
+import "physmath" as m
+
+print("gravity (weaker up there): +" + m.fixed(rel.gps_gravitational_rate() * 86400.0 * 1000000.0, 2) + " microseconds/day")
+print("orbital speed:             " + m.fixed(rel.gps_velocity_rate() * 86400.0 * 1000000.0, 2) + " microseconds/day")
+print("net:                       +" + m.fixed(rel.gps_clock_offset_us_per_day(), 2) + " microseconds/day")
+print("uncorrected, positions would drift by " + m.fixed(rel.gps_uncorrected_error_km_per_day(), 1) + " km per day")
