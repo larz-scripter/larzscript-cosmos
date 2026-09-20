@@ -77,13 +77,14 @@ for slug in man["pages"]:
     for l in p.links:
         if l.startswith("/") and any(l.startswith("/" + x) for x in ("cosmos",)) and not l.startswith("/cosmos/assets"):
             if l.split("#")[0] not in new_paths: bad(slug, "link into /cosmos/ that is not generated: " + l)
-# external internal links must exist on the live site
+# links to existing pages must exist on the live site (skip with COSMOS_NO_LIVE=1)
 checked = set()
 for slug in man["pages"]:
     h = open(os.path.join(SITE, slug, "index.html"), encoding="utf-8").read()
     for l in set(re.findall(r'href="(/[^"#?]*)"', h)):
         if l in new_paths or l in checked or l.startswith("/cosmos/assets") or l == "/": continue
         checked.add(l)
+        if os.environ.get("COSMOS_NO_LIVE"): continue
         try:
             r = urllib.request.urlopen(urllib.request.Request("https://larzos.com" + l, method="HEAD", headers={"User-Agent": "cosmos-check"}), timeout=15)
             if r.status >= 400: bad("links", "%s -> HTTP %d" % (l, r.status))

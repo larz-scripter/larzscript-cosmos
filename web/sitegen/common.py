@@ -67,7 +67,7 @@ def crumbs_html(crumbs):
 def badges(tests):
     return ('<div class="cs-badges"><span class="cs-badge"><b>Real Larzscript</b> running in your browser</span>'
             f'<span class="cs-badge"><b>{tests}</b> automated checks</span><span class="cs-badge">Open source · MIT</span>'
-            '<span class="cs-badge">No sign-up · nothing leaves your device</span></div>')
+            '<span class="cs-badge">No sign-up · your inputs never leave your device</span></div>')
 
 def faq_html(items):
     return '<section class="faqs"><h2>Frequently asked questions</h2>' + "".join(

@@ -249,7 +249,7 @@ for row in %s {
 {ui.table(["Destination", "Distance", "Ship time", "Earth time", "Top speed (fraction of c)"], trs)}
 <h2>Verification</h2>
 <p>The trip times and top speeds are compared with 50-digit decimal arithmetic for distances from 10<sup>12</sup> m to 25 million light-years. The function keeps the small quantity x = ad/(2c²) separate instead of forming 1 + x, which would throw away most of the digits for short trips (an early version of the library did exactly that, and the test that compared it with high-precision arithmetic caught it).</p>
-<p class="cs-note">Limits: this is special relativity in flat space. It ignores fuel mass, interstellar dust, the ship's own gravity and the expansion of the universe, which matters for the Andromeda case only in principle (it is gravitationally bound to our galaxy).</p>'''
+<p class="cs-note">Limits: this is special relativity in flat space. It ignores fuel mass, interstellar dust and the ship's own gravity. The expansion of the universe does not enter either: it does not stretch gravitationally bound systems such as our own galaxy and the Local Group, which includes Andromeda.</p>'''
     js = PAGE_PREFIX_JS(RK_DRIVER, RK_TYPES, ["dist", "dist_unit", "accel", "accel_unit"], '''
     set('ship',C.duration(N(k,'ship_s'))); note('ship','as measured by the crew\\'s clocks');
     set('earth',C.duration(N(k,'earth_s'))); note('earth','for someone who stayed home');
